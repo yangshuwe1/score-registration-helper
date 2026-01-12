@@ -1,12 +1,16 @@
 # 配置文件
 
 # Excel列配置（0-based索引）
+# 根据学校成绩登记表格式
 EXCEL_COLUMNS = {
-    'student_id': 0,      # A列：学号
-    'name': 1,            # B列：姓名
-    'regular_score': 2,   # C列：平时成绩
-    'final_score': 3      # D列：总成绩
+    'student_id': 0,      # A列：学号*
+    'name': 1,            # B列：姓名*
+    'regular_score': 4,   # E列：平时成绩
+    'final_score': 8      # I列：总成绩
 }
+
+# 表头行数配置
+HEADER_ROWS = 2  # 前2行是表头（说明行和列名行）
 
 # 语音识别配置
 # 模型选择: "tiny"(最快,最小), "small"(快,小), "base"(平衡), "medium"(慢,准确), "large"(最慢,最准确)

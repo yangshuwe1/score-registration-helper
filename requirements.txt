@@ -1,7 +1,9 @@
 # 基础依赖
 openpyxl>=3.1.2
 pandas>=2.0.0
-xlrd>=2.0.1
+xlrd==1.2.0  # 使用1.2.0版本以支持旧的.xls格式
+xlwt>=1.3.0  # 用于写入旧的.xls格式文件
+xlutils>=2.0.0  # 用于复制和修改.xls文件
 edge-tts>=6.1.0
 numpy>=1.24.0
 torch>=2.0.0
