@@ -264,10 +264,10 @@ class GradeEntryApp:
             self.root.after(0, lambda: self.status_label.config(
                 text="正在处理...", foreground="blue"
             ))
-            
-            # 解析结果
-            parsed = self.student_parser.parse(text)
-            if not parsed:
+
+            # 解析结果（支持多个学生）
+            parsed_list = self.student_parser.parse_multiple(text)
+            if not parsed_list:
                 self.root.after(0, lambda: self.status_label.config(
                     text="解析失败，请说：姓名/学号，分数", foreground="red"
                 ))
@@ -275,69 +275,75 @@ class GradeEntryApp:
                 self.root.after(0, lambda: self.record_button.config(text="开始录音"))
                 self.is_recording = False
                 return
-            
-            # 查找学生
-            if parsed['type'] == 'id':
-                row = self.excel_handler.find_student_by_id(parsed['identifier'])
+
+            # 处理所有解析出的学生信息
+            success_count = 0
+            confirmations = []
+
+            for parsed in parsed_list:
+                # 查找学生
+                if parsed['type'] == 'id':
+                    row = self.excel_handler.find_student_by_id(parsed['identifier'])
+                else:
+                    row = self.excel_handler.find_student_by_name(parsed['identifier'])
+
+                if not row:
+                    identifier = parsed['identifier']
+                    self.root.after(0, lambda i=identifier: self.log(
+                        f"未找到学生: {i}，跳过"
+                    ))
+                    continue
+
+                # 获取学生信息
+                student_info = self.excel_handler.get_student_info(row)
+                if not student_info:
+                    self.root.after(0, lambda: self.log("获取学生信息失败，跳过"))
+                    continue
+
+                # 更新成绩
+                if not self.excel_handler.update_score(row, self.current_column, parsed['score']):
+                    score = parsed['score']
+                    self.root.after(0, lambda s=score: self.log(f"更新成绩失败，分数: {s}，跳过"))
+                    continue
+
+                # 生成确认文本
+                confirmation = self.student_parser.format_confirmation(
+                    row, student_info['name'], parsed['score'], student_info.get('student_id')
+                )
+                confirmations.append(confirmation)
+                success_count += 1
+
+            # 保存文件（一次性保存所有更改）
+            if success_count > 0:
+                if not self.excel_handler.save_excel():
+                    self.root.after(0, lambda: self.status_label.config(
+                        text="保存失败，文件可能被占用", foreground="red"
+                    ))
+                    self.root.after(0, lambda: messagebox.showwarning(
+                        "保存失败", "请关闭Excel文件后重试"
+                    ))
+                    self.root.after(0, lambda: self.record_button.config(text="开始录音"))
+                    self.is_recording = False
+                    return
+
+                # 显示成功信息
+                self.root.after(0, lambda: self.status_label.config(
+                    text=f"成功录入{success_count}条，继续监听...", foreground="green"
+                ))
+
+                # 记录日志
+                for confirmation in confirmations:
+                    c = confirmation  # 避免闭包问题
+                    self.root.after(0, lambda conf=c: self.log(f"已更新: {conf}"))
+
+                # 语音播报（播报所有成功的记录）
+                full_confirmation = "，".join(confirmations)
+                self.speech_synthesis.speak_async(full_confirmation)
             else:
-                row = self.excel_handler.find_student_by_name(parsed['identifier'])
-            
-            if not row:
                 self.root.after(0, lambda: self.status_label.config(
-                    text=f"未找到学生: {parsed['identifier']}", foreground="red"
+                    text="未成功录入任何成绩", foreground="red"
                 ))
-                self.root.after(0, lambda: self.log(
-                    f"未找到学生: {parsed['identifier']}，请检查Excel文件"
-                ))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
-                return
-            
-            # 获取学生信息
-            student_info = self.excel_handler.get_student_info(row)
-            if not student_info:
-                self.root.after(0, lambda: self.status_label.config(
-                    text="获取学生信息失败", foreground="red"
-                ))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
-                return
-            
-            # 更新成绩
-            if not self.excel_handler.update_score(row, self.current_column, parsed['score']):
-                self.root.after(0, lambda: self.status_label.config(
-                    text=f"更新成绩失败，分数: {parsed['score']}", foreground="red"
-                ))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
-                return
-            
-            # 保存文件
-            if not self.excel_handler.save_excel():
-                self.root.after(0, lambda: self.status_label.config(
-                    text="保存失败，文件可能被占用", foreground="red"
-                ))
-                self.root.after(0, lambda: messagebox.showwarning(
-                    "保存失败", "请关闭Excel文件后重试"
-                ))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
-                return
-            
-            # 生成确认文本并播报
-            confirmation = self.student_parser.format_confirmation(
-                row, student_info['name'], parsed['score']
-            )
-            
-            self.root.after(0, lambda: self.status_label.config(
-                text="操作成功，继续监听...", foreground="green"
-            ))
-            self.root.after(0, lambda: self.log(
-                f"已更新: {confirmation}"
-            ))
-            
-            # 语音播报（异步，不阻塞）
-            self.speech_synthesis.speak_async(confirmation)
+                self.root.after(0, lambda: self.log("未成功录入任何成绩，请检查输入"))
             
             # 继续监听（不重置按钮，保持录音状态）
             # 用户可以继续说下一个，或点击停止
