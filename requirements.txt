@@ -1,0 +1,19 @@
+# 基础依赖
+openpyxl>=3.1.2
+pandas>=2.0.0
+xlrd>=2.0.1
+edge-tts>=6.1.0
+numpy>=1.24.0
+torch>=2.0.0
+pyinstaller>=5.13.0
+
+# 语音识别依赖（需要先安装）
+# tokenizers 已安装: 0.22.2
+# 然后安装: pip install av faster-whisper ctranslate2
+faster-whisper>=1.2.0
+
+# 音频输入（优先使用sounddevice，更易安装）
+sounddevice>=0.4.6
+scipy>=1.10.0
+# 备用方案（如果sounddevice不可用）
+# pyaudio>=0.2.14
