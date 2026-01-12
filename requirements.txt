@@ -13,6 +13,7 @@ pyinstaller>=5.13.0
 # tokenizers 已安装: 0.22.2
 # 然后安装: pip install av faster-whisper ctranslate2
 faster-whisper>=1.2.0
+onnxruntime>=1.16.0  # VAD过滤器所需（提高识别准确率）
 
 # 音频输入（优先使用sounddevice，更易安装）
 sounddevice>=0.4.6
