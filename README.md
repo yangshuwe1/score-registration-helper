@@ -126,7 +126,7 @@ python build_exe.py
 - Python 3.8+
 - tkinter（GUI）
 - faster-whisper（语音识别）
-- sounddevice（实时录音，比PyAudio更易安装）
+- sounddevice（实时录音）
 - edge-tts（语音合成）
 - openpyxl（Excel处理）
 - pandas（数据处理）
