@@ -125,16 +125,18 @@ class SpeechRecognition:
         last_speech_time = None
         
         def audio_callback(indata, frames, time_info, status):
+            nonlocal speech_started, last_speech_time  # 声明使用外部变量
+
             if status:
                 print(f"录音状态: {status}")
-            
+
             if not self.is_recording:
                 raise sd.CallbackStop
-            
+
             # 计算音频能量（简单的VAD）
             audio_level = np.abs(indata).mean()
             threshold = 0.01  # 音量阈值，可根据环境调整
-            
+
             if audio_level > threshold:
                 # 检测到声音
                 self.audio_data.append(indata.copy())
