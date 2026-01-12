@@ -337,30 +337,45 @@ class SpeechRecognition:
         
         try:
             print("正在识别语音...")
-            # 使用更快的参数配置
-            segments, info = self.model.transcribe(
-                audio_file,
-                beam_size=5,
-                language="zh",
-                vad_filter=True,  # 启用VAD过滤，提高准确率
-                vad_parameters=dict(min_silence_duration_ms=500)
-            )
-            
+
+            # 尝试使用VAD过滤器（需要onnxruntime）
+            try:
+                segments, info = self.model.transcribe(
+                    audio_file,
+                    beam_size=5,
+                    language="zh",
+                    vad_filter=True,  # 启用VAD过滤，提高准确率
+                    vad_parameters=dict(min_silence_duration_ms=500)
+                )
+            except RuntimeError as e:
+                # 如果VAD不可用（缺少onnxruntime），禁用VAD重试
+                if "onnxruntime" in str(e):
+                    print("提示: VAD过滤器不可用（缺少onnxruntime），使用标准模式")
+                    print("      建议安装: pip install onnxruntime")
+                    segments, info = self.model.transcribe(
+                        audio_file,
+                        beam_size=5,
+                        language="zh",
+                        vad_filter=False  # 禁用VAD
+                    )
+                else:
+                    raise
+
             # 获取识别结果
             text = ""
             for segment in segments:
                 text += segment.text
-            
+
             text = text.strip()
             print(f"识别结果: {text}")
-            
+
             # 清理临时文件（延迟清理，确保识别完成）
             try:
                 if os.path.exists(audio_file):
                     os.remove(audio_file)
             except:
                 pass
-            
+
             return text if text else None
         except Exception as e:
             print(f"语音识别失败: {e}")
