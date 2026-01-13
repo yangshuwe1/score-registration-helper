@@ -38,6 +38,7 @@ class SpeechRecognition:
         self.audio_frames = []
         self.audio_data = []  # 用于sounddevice
         self.callback = None  # 实时识别回调函数
+        self._vad_warning_shown = False  # 标记VAD警告是否已显示
         self._load_model()
     
     def _load_model(self):
@@ -350,8 +351,11 @@ class SpeechRecognition:
             except RuntimeError as e:
                 # 如果VAD不可用（缺少onnxruntime），禁用VAD重试
                 if "onnxruntime" in str(e):
-                    print("提示: VAD过滤器不可用（缺少onnxruntime），使用标准模式")
-                    print("      建议安装: pip install onnxruntime")
+                    # 只在第一次显示警告
+                    if not self._vad_warning_shown:
+                        print("提示: VAD过滤器不可用（缺少onnxruntime），使用标准模式")
+                        print("      建议安装: pip install onnxruntime")
+                        self._vad_warning_shown = True
                     segments, info = self.model.transcribe(
                         audio_file,
                         beam_size=5,

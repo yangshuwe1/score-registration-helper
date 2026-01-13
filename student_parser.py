@@ -15,6 +15,49 @@ class StudentParser:
         # 匹配分数的模式：优先匹配"数字+分"，再匹配纯数字
         self.score_with_unit_pattern = re.compile(r'(\d+(?:\.\d+)?)分')
         self.score_pattern = re.compile(r'(\d+(?:\.\d+)?)')
+
+        # 中文数字映射表
+        self.cn_num_map = {
+            '零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
+            '五': '5', '六': '6', '七': '7', '八': '8', '九': '9',
+            '十': '10', '百': '100',
+            # 大写
+            '壹': '1', '贰': '2', '叁': '3', '肆': '4', '伍': '5',
+            '陆': '6', '柒': '7', '捌': '8', '玖': '9', '拾': '10'
+        }
+
+        # 繁体字转简体字映射表（常用字）
+        self.traditional_to_simplified = {
+            '號': '号', '個': '个', '學': '学', '號': '号',
+            '�畫': '画', '書': '书', '長': '长', '門': '门',
+            '開': '开', '關': '关', '來': '来', '時': '时'
+        }
+
+    def _normalize_text(self, text: str) -> str:
+        """
+        规范化文本：繁体转简体，中文数字转阿拉伯数字
+        """
+        if not text:
+            return text
+
+        # 1. 繁体字转简体字
+        for trad, simp in self.traditional_to_simplified.items():
+            text = text.replace(trad, simp)
+
+        # 2. 处理中文数字（支持"二十"、"三十"等）
+        # 先处理组合数字（如"二十"、"三十"）
+        text = re.sub(r'([一二三四五六七八九])十', lambda m: str(int(self.cn_num_map[m.group(1)]) * 10), text)
+        # 处理"十X"（如"十一"、"十二"）
+        text = re.sub(r'十([一二三四五六七八九])', lambda m: str(10 + int(self.cn_num_map[m.group(1)])), text)
+        # 处理单独的"十"
+        text = text.replace('十', '10')
+
+        # 3. 替换单个中文数字
+        for cn, num in self.cn_num_map.items():
+            if cn not in ['十', '百']:  # 十和百已经处理过了
+                text = text.replace(cn, num)
+
+        return text
     
     def parse(self, text: str) -> Optional[Dict[str, any]]:
         """
@@ -27,8 +70,10 @@ class StudentParser:
         """
         if not text:
             return None
-        
+
         text = text.strip()
+        # 规范化文本（繁体转简体，中文数字转阿拉伯数字）
+        text = self._normalize_text(text)
 
         # 提取分数：优先匹配"数字+分"格式
         score_match = self.score_with_unit_pattern.search(text)
@@ -118,6 +163,8 @@ class StudentParser:
             return []
 
         text = text.strip()
+        # 规范化文本（繁体转简体，中文数字转阿拉伯数字）
+        text = self._normalize_text(text)
         results = []
 
         # 策略：使用正则表达式找出所有的"学号/姓名+分数"对
