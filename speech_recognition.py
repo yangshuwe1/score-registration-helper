@@ -102,36 +102,37 @@ class SpeechRecognition:
             traceback.print_exc()
             self.model = None
     
-    def record_audio_realtime(self, on_speech_end: Callable[[str], None], 
-                              silence_duration: float = 1.5, 
+    def record_audio_realtime(self, on_speech_end: Callable[[str], None],
+                              silence_duration: float = 1.5,
                               min_speech_duration: float = 0.5) -> bool:
         """
         实时录音，使用VAD自动检测说话结束
         on_speech_end: 检测到说话结束后的回调函数，参数为识别的文本
         silence_duration: 静音持续时间（秒），超过此时间认为说话结束
         min_speech_duration: 最小说话时长（秒），短于此时间忽略
+        返回: True表示成功识别一次语音，False表示失败
         """
         if self.model is None:
             print("模型未加载")
             return False
-        
+
         if not SOUNDDEVICE_AVAILABLE and not PYAUDIO_AVAILABLE:
             print("错误: 未找到录音库")
             print("请运行: pip install sounddevice")
             return False
-        
-        self.is_recording = True
+
         self.audio_data = []
         speech_started = False
         last_speech_time = None
-        
+        recording_stopped = False  # 标记录音是否已停止
+
         def audio_callback(indata, frames, time_info, status):
-            nonlocal speech_started, last_speech_time  # 声明使用外部变量
+            nonlocal speech_started, last_speech_time, recording_stopped
 
             if status:
                 print(f"录音状态: {status}")
 
-            if not self.is_recording:
+            if recording_stopped:
                 raise sd.CallbackStop
 
             # 计算音频能量（简单的VAD）
@@ -153,57 +154,60 @@ class SpeechRecognition:
                     self.audio_data.append(indata.copy())
                     # 检查是否静音时间过长
                     if last_speech_time and (time.time() - last_speech_time) > silence_duration:
-                        # 说话结束，停止录音并识别
+                        # 说话结束，停止录音
+                        recording_stopped = True
                         raise sd.CallbackStop
-        
+
         try:
             print("开始实时录音...（说完后自动识别）")
             if SOUNDDEVICE_AVAILABLE:
                 # 使用sounddevice录音
-                with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, 
+                with sd.InputStream(samplerate=SAMPLE_RATE, channels=1,
                                    callback=audio_callback, blocksize=CHUNK_SIZE):
-                    while self.is_recording:
+                    # 等待录音完成（由callback中的sd.CallbackStop触发）
+                    while not recording_stopped:
                         time.sleep(0.1)
             else:
                 # 使用pyaudio（旧方法，不支持实时VAD）
                 return self._record_with_pyaudio_vad(on_speech_end, silence_duration)
-            
+
             # 录音结束，处理音频
             if len(self.audio_data) > 0:
                 # 合并音频数据
                 audio_array = np.concatenate(self.audio_data, axis=0)
                 audio_duration = len(audio_array) / SAMPLE_RATE
-                
+
                 if audio_duration < min_speech_duration:
                     print(f"录音太短（{audio_duration:.2f}秒），忽略")
                     return False
-                
+
                 # 保存为临时文件
                 temp_file = "temp_recording.wav"
                 wav_write(temp_file, SAMPLE_RATE, (audio_array * 32767).astype(np.int16))
-                
+
                 # 识别
                 text = self.transcribe(temp_file)
                 if text:
                     on_speech_end(text)
-                return True
+                    return True
+                return False
             else:
                 print("未录制到音频")
                 return False
-                
+
         except sd.CallbackStop:
             # 正常停止（VAD检测到说话结束）
             if len(self.audio_data) > 0:
                 audio_array = np.concatenate(self.audio_data, axis=0)
                 audio_duration = len(audio_array) / SAMPLE_RATE
-                
+
                 if audio_duration >= min_speech_duration:
                     temp_file = "temp_recording.wav"
                     wav_write(temp_file, SAMPLE_RATE, (audio_array * 32767).astype(np.int16))
                     text = self.transcribe(temp_file)
                     if text:
                         on_speech_end(text)
-                    return True
+                        return True
             return False
         except Exception as e:
             print(f"实时录音失败: {e}")

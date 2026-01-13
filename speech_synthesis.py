@@ -73,12 +73,22 @@ class SpeechSynthesis:
             # 方案2: Windows系统 - 使用winsound（静默播放，不弹窗）
             if os.name == 'nt':  # Windows
                 try:
-                    # 首先尝试使用winsound（Python自带，不会弹窗）
-                    # 但winsound只支持WAV格式，我们的是MP3，所以需要转换或使用其他方法
-                    # 使用PowerShell静默播放（不会弹出窗口）
                     import time
-                    # 估算播放时长
-                    estimated_duration = min(max(len(text) * 0.15, 2), 10) if text else 3
+                    import re
+
+                    # 改进的时长估算：基于汉字数量
+                    if text:
+                        # 计算汉字数量（中文字符）
+                        chinese_chars = len(re.findall(r'[\u4e00-\u9fa5]', text))
+                        # 计算数字和英文字符数量
+                        other_chars = len(re.findall(r'[a-zA-Z0-9]', text))
+                        # 中文语音速度约3-3.5字/秒，数字约5个/秒
+                        # 为了保险，使用较慢的速度估算，并增加缓冲时间
+                        estimated_duration = (chinese_chars / 2.5) + (other_chars / 4) + 1.5
+                        # 限制在合理范围内
+                        estimated_duration = min(max(estimated_duration, 2), 15)
+                    else:
+                        estimated_duration = 3
 
                     # 使用PowerShell MediaPlayer播放（静默，不弹窗）
                     ps_command = f'''
@@ -95,7 +105,7 @@ class SpeechSynthesis:
                         subprocess.run(
                             ['powershell', '-Command', ps_command],
                             capture_output=True,
-                            timeout=estimated_duration + 2,
+                            timeout=estimated_duration + 3,
                             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
                         )
                         return

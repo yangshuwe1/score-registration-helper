@@ -35,7 +35,7 @@ class StudentParser:
 
     def _normalize_text(self, text: str) -> str:
         """
-        规范化文本：繁体转简体，中文数字转阿拉伯数字
+        规范化文本：繁体转简体，中文数字转阿拉伯数字，去除干扰词
         """
         if not text:
             return text
@@ -44,7 +44,15 @@ class StudentParser:
         for trad, simp in self.traditional_to_simplified.items():
             text = text.replace(trad, simp)
 
-        # 2. 处理中文数字（支持"二十"、"三十"等）
+        # 2. 去除常见干扰词和语音识别错误
+        # "四个号" -> "四号"，"个"通常是识别错误
+        text = text.replace('个号', '号')
+        text = text.replace('个学生', '学生')
+        # 去除多余的空格、逗号前后的"号"
+        text = re.sub(r'号\s*,', '号,', text)
+        text = re.sub(r',\s*号', ',', text)
+
+        # 3. 处理中文数字（支持"二十"、"三十"等）
         # 先处理组合数字（如"二十"、"三十"）
         text = re.sub(r'([一二三四五六七八九])十', lambda m: str(int(self.cn_num_map[m.group(1)]) * 10), text)
         # 处理"十X"（如"十一"、"十二"）
@@ -52,7 +60,7 @@ class StudentParser:
         # 处理单独的"十"
         text = text.replace('十', '10')
 
-        # 3. 替换单个中文数字
+        # 4. 替换单个中文数字
         for cn, num in self.cn_num_map.items():
             if cn not in ['十', '百']:  # 十和百已经处理过了
                 text = text.replace(cn, num)
@@ -134,20 +142,19 @@ class StudentParser:
         
         return None
     
-    def format_confirmation(self, row: int, name: str, score: float, student_id: str = None) -> str:
+    def format_confirmation(self, row: int, name: str, score: float) -> str:
         """
         格式化确认播报文本
-        row: 行号
+        row: Excel行号（1-based，包含表头）
         name: 姓名
         score: 分数
-        student_id: 学号（可选）
+        返回: "序号号，姓名，分数分"（例如："1号，许凯旋，30分"）
         """
-        # 如果提供了学号，播报学号而不是行号
-        if student_id:
-            return f"{student_id}号，{name}，{score}分"
-        else:
-            # 没有学号，播报行号
-            return f"第{row}行，{name}，{score}分"
+        # 计算序号：row是Excel行号（1-based），减去表头行数（2行）
+        # 例如：row=3 -> 序号=1（第1个学生）
+        from config import HEADER_ROWS
+        sequence_number = row - HEADER_ROWS
+        return f"{sequence_number}号，{name}，{score}分"
 
     def parse_multiple(self, text: str) -> List[Dict[str, any]]:
         """

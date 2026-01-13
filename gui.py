@@ -254,6 +254,8 @@ class GradeEntryApp:
                     text="识别失败，继续监听...", foreground="orange"
                 ))
                 self.root.after(0, lambda: self.log("语音识别失败，请检查录音质量"))
+                # 语音提醒
+                self.speech_synthesis.speak_async("识别失败，请重试")
                 # 不要设置 is_recording = False，继续监听
                 return
             
@@ -271,6 +273,8 @@ class GradeEntryApp:
                     text="解析失败，继续监听...请说：姓名/学号，分数", foreground="orange"
                 ))
                 self.root.after(0, lambda: self.log(f"解析失败，识别文本: {text}"))
+                # 语音提醒
+                self.speech_synthesis.speak_async("解析失败，请说学号或姓名加分数")
                 # 不要设置 is_recording = False，继续监听
                 return
 
@@ -306,7 +310,7 @@ class GradeEntryApp:
 
                 # 生成确认文本
                 confirmation = self.student_parser.format_confirmation(
-                    row, student_info['name'], parsed['score'], student_info.get('student_id')
+                    row, student_info['name'], parsed['score']
                 )
                 confirmations.append(confirmation)
                 success_count += 1
@@ -342,6 +346,8 @@ class GradeEntryApp:
                     text="未成功录入任何成绩", foreground="red"
                 ))
                 self.root.after(0, lambda: self.log("未成功录入任何成绩，请检查输入"))
+                # 语音提醒
+                self.speech_synthesis.speak_async("未找到学生，请重试")
             
             # 继续监听（不重置按钮，保持录音状态）
             # 用户可以继续说下一个，或点击停止
