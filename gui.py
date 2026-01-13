@@ -291,21 +291,12 @@ class GradeEntryApp:
 
             for parsed in parsed_list:
                 # 查找学生
-                # 重要：用户说的"3号"指的是序号（第3个学生），不是学号！
                 if parsed['type'] == 'id':
                     identifier = parsed['identifier']
-                    try:
-                        sequence = int(identifier)
-                        self.root.after(0, lambda i=identifier: self.log(
-                            f"查找序号: {i}（第{i}个学生）"
-                        ))
-                        row = self.excel_handler.find_student_by_sequence(sequence)
-                    except ValueError:
-                        # 无法转换为序号，跳过（不使用学号查找）
-                        self.root.after(0, lambda i=identifier: self.log(
-                            f"无效的序号: {i}，跳过"
-                        ))
-                        row = None
+                    self.root.after(0, lambda i=identifier: self.log(
+                        f"查找学号: {i}"
+                    ))
+                    row = self.excel_handler.find_student_by_id(parsed['identifier'])
                 else:
                     identifier = parsed['identifier']
                     self.root.after(0, lambda i=identifier: self.log(

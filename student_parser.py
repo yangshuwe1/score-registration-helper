@@ -39,33 +39,10 @@ class StudentParser:
 
     def _normalize_text(self, text: str) -> str:
         """
-        规范化文本：繁体转简体，中文数字转阿拉伯数字，去除干扰词，音近字纠正
+        规范化文本：繁体转简体，中文数字转阿拉伯数字，去除干扰词
         """
         if not text:
             return text
-
-        # 0. 音近字纠正（语音识别常见错误）
-        phonetic_corrections = {
-            '以后': '一号',
-            '已后': '一号',
-            '二后': '二号',
-            '三后': '三号',
-            '四后': '四号',
-            '五后': '五号',
-            '六后': '六号',
-            '七后': '七号',
-            '八后': '八号',
-            '九后': '九号',
-            '然後': '4号',  # "然後"可能是"4号"
-            '大家好': '第几号',  # 尝试纠正
-            '的几号': '第几号',
-            '点几号': '第几号',
-        }
-
-        for wrong, correct in phonetic_corrections.items():
-            if wrong in text:
-                text = text.replace(wrong, correct)
-                print(f"音近字纠正: '{wrong}' → '{correct}'")
 
         # 1. 繁体字转简体字
         for trad, simp in self.traditional_to_simplified.items():
