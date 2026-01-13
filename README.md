@@ -6,6 +6,8 @@
 
 - ✅ 图形化界面，操作简单
 - ✅ **实时语音识别**：说完自动识别，无需点击停止
+- ✅ **智能识别优化**：使用引导性 prompt 提高识别准确率
+- ✅ **VAD 降噪**：自动过滤环境噪音，提升识别质量
 - ✅ 支持语音输入识别（中文）
 - ✅ 支持序号或姓名定位学生
 - ✅ 自动更新Excel成绩
@@ -36,7 +38,12 @@
 pip install -r requirements.txt
 ```
 
-3. 运行程序：
+3. （推荐）安装 onnxruntime 以启用 VAD 降噪功能：
+```bash
+pip install onnxruntime
+```
+
+4. 运行程序：
 ```bash
 python main.py
 ```
@@ -127,17 +134,27 @@ python build_exe.py
 
 - Python 3.12+
 - tkinter（GUI）
-- faster-whisper（语音识别）
+- faster-whisper（语音识别，支持 initial_prompt 引导识别）
 - sounddevice（实时录音）
 - edge-tts（语音合成）
 - openpyxl（Excel处理）
 - pandas（数据处理）
+- onnxruntime（可选，启用 VAD 降噪功能）
 
 ## 许可证
 
 本项目仅供个人使用。
 
 ## 更新日志
+
+### v1.2.0
+- 新增智能识别优化：使用 initial_prompt 引导 whisper 优先识别"序号+分数"和"姓名+分数"格式
+- 启用 VAD 降噪功能，自动过滤环境噪音
+- 将学号识别改为序号识别，简化输入流程
+
+### v1.1.0
+- 降级到 Python 3.12.10，提高兼容性
+- 修复 Windows 系统 GBK 编码错误
 
 ### v1.0.0
 - 初始版本

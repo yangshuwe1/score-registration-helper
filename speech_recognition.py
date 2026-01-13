@@ -343,6 +343,16 @@ class SpeechRecognition:
         try:
             print("正在识别语音...")
 
+            # 添加 initial_prompt 来引导 whisper 识别特定格式
+            # 这个 prompt 会告诉 whisper 我们期望的输入格式，提高识别准确率
+            initial_prompt = (
+                "这是一个成绩登记系统。"
+                "用户会说序号加分数或姓名加分数。"
+                "例如：1号100分，2号95分，3号88分，"
+                "张三100分，李四95分，王五88分。"
+                "格式固定为：序号/姓名，分数。"
+            )
+
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:
                 segments, info = self.model.transcribe(
@@ -350,7 +360,8 @@ class SpeechRecognition:
                     beam_size=5,
                     language="zh",
                     vad_filter=True,  # 启用VAD过滤，提高准确率
-                    vad_parameters=dict(min_silence_duration_ms=500)
+                    vad_parameters=dict(min_silence_duration_ms=500),
+                    initial_prompt=initial_prompt  # 添加引导性 prompt
                 )
             except RuntimeError as e:
                 # 如果VAD不可用（缺少onnxruntime），禁用VAD重试
@@ -364,7 +375,8 @@ class SpeechRecognition:
                         audio_file,
                         beam_size=5,
                         language="zh",
-                        vad_filter=False  # 禁用VAD
+                        vad_filter=False,  # 禁用VAD
+                        initial_prompt=initial_prompt  # 仍然使用引导性 prompt
                     )
                 else:
                     raise
