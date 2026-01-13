@@ -5,8 +5,6 @@ GUI界面模块
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import threading
-import time
-import re
 from typing import Optional
 from excel_handler import ExcelHandler
 from speech_recognition import SpeechRecognition
@@ -368,12 +366,6 @@ class GradeEntryApp:
                 # 语音播报（播报所有成功的记录）
                 full_confirmation = "，".join(confirmations)
                 self.speech_synthesis.speak_async(full_confirmation)
-
-                # 等待播报完成（避免麦克风录到扬声器的声音）
-                chinese_chars = len(re.findall(r'[\u4e00-\u9fa5]', full_confirmation))
-                other_chars = len(re.findall(r'[a-zA-Z0-9]', full_confirmation))
-                estimated_duration = (chinese_chars / 2.5) + (other_chars / 4) + 1.5
-                time.sleep(min(estimated_duration, 10))
             else:
                 self.root.after(0, lambda: self.status_label.config(
                     text="未成功录入任何成绩", foreground="red"
@@ -381,10 +373,7 @@ class GradeEntryApp:
                 self.root.after(0, lambda: self.log("未成功录入任何成绩，请检查输入"))
                 # 语音提醒
                 self.speech_synthesis.speak_async("未找到学生，请重试")
-
-                # 等待播报完成
-                time.sleep(2)
-
+            
             # 继续监听（不重置按钮，保持录音状态）
             # 用户可以继续说下一个，或点击停止
 
