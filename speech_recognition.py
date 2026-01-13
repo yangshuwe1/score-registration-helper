@@ -426,11 +426,9 @@ class SpeechRecognition:
 
         # 简单替换（更复杂的转换需要专门的库）
         for cn, num in chinese_num_map.items():
-            # 替换在"号"前面的中文数字（如"一号" -> "1号"）
-            text = re.sub(f'{cn}(?=号)', num, text)
-            # 替换在"分"前面的中文数字（如"八十五分" -> "85分"）
-            # 使用更简单的模式，不使用可变长度lookbehind
-            text = re.sub(f'{cn}(?=分)', num, text)
+            # 只替换在"号"和"分"上下文中的数字
+            text = re.sub(f'({cn})(?=号)', num, text)
+            text = re.sub(f'(?<=号.{{0,20}})({cn})(?=分)', num, text)
 
         # 5. 去除重复片段（如"2号90分，2号90分"）
         # 检测并去除重复的模式
