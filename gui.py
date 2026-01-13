@@ -301,11 +301,11 @@ class GradeEntryApp:
                         ))
                         row = self.excel_handler.find_student_by_sequence(sequence)
                     except ValueError:
-                        # 如果不是纯数字，尝试作为学号查找
+                        # 无法转换为序号，跳过（不使用学号查找）
                         self.root.after(0, lambda i=identifier: self.log(
-                            f"查找学号: {i}"
+                            f"无效的序号: {i}，跳过"
                         ))
-                        row = self.excel_handler.find_student_by_id(parsed['identifier'])
+                        row = None
                 else:
                     identifier = parsed['identifier']
                     self.root.after(0, lambda i=identifier: self.log(

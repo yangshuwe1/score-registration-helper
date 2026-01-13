@@ -343,12 +343,16 @@ class SpeechRecognition:
         try:
             print("正在识别语音...")
 
+            # 使用prompt引导Whisper优先识别数字（序号和分数）
+            initial_prompt = "一号80分，二号90分，三号100分，第四号85分，5号95分，六号88分"
+
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:
                 segments, info = self.model.transcribe(
                     audio_file,
                     beam_size=5,
                     language="zh",
+                    initial_prompt=initial_prompt,  # 引导识别数字格式
                     vad_filter=True,  # 启用VAD过滤，提高准确率
                     vad_parameters=dict(min_silence_duration_ms=500)
                 )
@@ -364,6 +368,7 @@ class SpeechRecognition:
                         audio_file,
                         beam_size=5,
                         language="zh",
+                        initial_prompt=initial_prompt,  # 引导识别数字格式
                         vad_filter=False  # 禁用VAD
                     )
                 else:
