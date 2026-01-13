@@ -356,7 +356,6 @@ class SpeechRecognition:
             try:
                 segments, info = self.model.transcribe(
                     audio_file,
-                    hotwords=["一","二","三","四","五","六","七","八","九","十","号","分"],
                     beam_size=5,
                     language="zh",
                     vad_filter=True,  # 启用VAD过滤，提高准确率
