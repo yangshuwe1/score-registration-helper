@@ -2,6 +2,7 @@
 GUI界面模块
 使用tkinter构建图形界面
 """
+# -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import threading
@@ -73,11 +74,11 @@ class GradeEntryApp:
                 self.root.after(0, lambda: self.status_label.config(
                     text="模型加载失败，请检查网络连接", foreground="red"
                 ))
-                self.root.after(0, lambda: self.log("✗ 错误: 语音识别模型加载失败"))
+                self.root.after(0, lambda: self.log("[错误] 语音识别模型加载失败"))
                 self.root.after(0, lambda: self.log("   可能原因: 网络连接问题或磁盘空间不足"))
                 return
             
-            self.root.after(0, lambda: self.log("✓ 语音识别模型加载成功"))
+            self.root.after(0, lambda: self.log("[成功] 语音识别模型加载成功"))
             time.sleep(0.1)
             
             # 步骤3: 初始化语音合成
@@ -98,11 +99,11 @@ class GradeEntryApp:
             
             # 初始化完成
             self.root.after(0, lambda: self.status_label.config(
-                text="✓ 准备就绪，可以开始使用", foreground="green"
+                text="[就绪] 准备就绪，可以开始使用", foreground="green"
             ))
             self.root.after(0, lambda: self.record_button.config(state="normal"))
             self.root.after(0, lambda: self.log("=" * 50))
-            self.root.after(0, lambda: self.log("✓ 程序初始化完成！"))
+            self.root.after(0, lambda: self.log("[成功] 程序初始化完成！"))
             self.root.after(0, lambda: self.log("提示: 请先选择Excel文件"))
             self.root.after(0, lambda: self.log("=" * 50))
             
@@ -111,7 +112,7 @@ class GradeEntryApp:
             self.root.after(0, lambda: self.status_label.config(
                 text=error_msg, foreground="red"
             ))
-            self.root.after(0, lambda: self.log(f"✗ 错误: {error_msg}"))
+            self.root.after(0, lambda: self.log(f"[错误] {error_msg}"))
             self.root.after(0, lambda: self.log("   建议: 关闭其他程序，释放内存后重试"))
         except Exception as e:
             import traceback
@@ -119,7 +120,7 @@ class GradeEntryApp:
             self.root.after(0, lambda: self.status_label.config(
                 text=f"初始化失败: {error_msg[:50]}...", foreground="red"
             ))
-            self.root.after(0, lambda: self.log(f"✗ 错误: {error_msg}"))
+            self.root.after(0, lambda: self.log(f"[错误] {error_msg}"))
             self.root.after(0, lambda: self.log(f"详细错误信息已记录"))
             # 只在调试时显示详细错误
             if __debug__:

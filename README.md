@@ -16,7 +16,7 @@
 ## 系统要求
 
 - Windows 10/11
-- Python 3.8+（开发环境）
+- Python 3.12+（建议使用 Python 3.12.10 或更高版本）
 - 麦克风设备（用于语音输入）
 - 至少2GB可用磁盘空间（用于模型文件）
 
@@ -123,7 +123,7 @@ python build_exe.py
 
 ## 技术栈
 
-- Python 3.8+
+- Python 3.12+
 - tkinter（GUI）
 - faster-whisper（语音识别）
 - sounddevice（实时录音）
