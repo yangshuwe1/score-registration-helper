@@ -1,7 +1,6 @@
 """
 语音识别模块
 使用faster-whisper实现本地语音识别，支持实时识别（VAD自动检测）
-参考OpenAI Whisper最佳实践进行优化
 """
 import wave
 import numpy as np
@@ -10,7 +9,6 @@ from typing import Optional, Callable
 import threading
 import os
 import time
-import re
 from scipy.io.wavfile import write as wav_write
 from config import (
     WHISPER_MODEL, WHISPER_DEVICE, WHISPER_COMPUTE_TYPE,
@@ -41,8 +39,6 @@ class SpeechRecognition:
         self.audio_data = []  # 用于sounddevice
         self.callback = None  # 实时识别回调函数
         self._vad_warning_shown = False  # 标记VAD警告是否已显示
-        self._last_recognition = ""  # 上次识别结果，用于去重
-        self._recognition_count = 0  # 识别计数器，用于临时文件命名
         self._load_model()
     
     def _load_model(self):
@@ -107,13 +103,13 @@ class SpeechRecognition:
             self.model = None
     
     def record_audio_realtime(self, on_speech_end: Callable[[str], None],
-                              silence_duration: float = 2.0,
-                              min_speech_duration: float = 0.8) -> bool:
+                              silence_duration: float = 1.5,
+                              min_speech_duration: float = 0.5) -> bool:
         """
         实时录音，使用VAD自动检测说话结束
         on_speech_end: 检测到说话结束后的回调函数，参数为识别的文本
-        silence_duration: 静音持续时间（秒），超过此时间认为说话结束（增加到2.0秒）
-        min_speech_duration: 最小说话时长（秒），短于此时间忽略（增加到0.8秒）
+        silence_duration: 静音持续时间（秒），超过此时间认为说话结束
+        min_speech_duration: 最小说话时长（秒），短于此时间忽略
         返回: True表示成功识别一次语音，False表示失败
         """
         if self.model is None:
@@ -130,12 +126,8 @@ class SpeechRecognition:
         last_speech_time = None
         recording_stopped = False  # 标记录音是否已停止
 
-        # 用于平滑VAD检测的缓冲区
-        energy_buffer = []
-        buffer_size = 5  # 使用最近5帧的平均值
-
         def audio_callback(indata, frames, time_info, status):
-            nonlocal speech_started, last_speech_time, recording_stopped, energy_buffer
+            nonlocal speech_started, last_speech_time, recording_stopped
 
             if status:
                 print(f"录音状态: {status}")
@@ -143,39 +135,26 @@ class SpeechRecognition:
             if recording_stopped:
                 raise sd.CallbackStop
 
-            # 计算音频能量（改进的VAD）
-            # 使用RMS（均方根）而不是简单平均值，更准确
-            audio_level = np.sqrt(np.mean(indata**2))
+            # 计算音频能量（简单的VAD）
+            audio_level = np.abs(indata).mean()
+            threshold = 0.01  # 音量阈值，可根据环境调整
 
-            # 添加到缓冲区进行平滑
-            energy_buffer.append(audio_level)
-            if len(energy_buffer) > buffer_size:
-                energy_buffer.pop(0)
-
-            # 使用平滑后的能量值
-            smoothed_level = np.mean(energy_buffer)
-
-            # 动态阈值：提高到0.02，减少噪音误触发
-            threshold = 0.02
-
-            if smoothed_level > threshold:
+            if audio_level > threshold:
                 # 检测到声音
                 self.audio_data.append(indata.copy())
                 if not speech_started:
                     speech_started = True
                     last_speech_time = time.time()
-                    print("检测到语音开始")
                 else:
                     last_speech_time = time.time()
             else:
                 # 静音
                 if speech_started:
-                    # 记录静音片段（保持音频连续性）
+                    # 记录静音片段
                     self.audio_data.append(indata.copy())
                     # 检查是否静音时间过长
                     if last_speech_time and (time.time() - last_speech_time) > silence_duration:
                         # 说话结束，停止录音
-                        print("检测到语音结束")
                         recording_stopped = True
                         raise sd.CallbackStop
 
@@ -202,14 +181,8 @@ class SpeechRecognition:
                     print(f"录音太短（{audio_duration:.2f}秒），忽略")
                     return False
 
-                # 音频预处理：降噪和归一化
-                audio_array = self._preprocess_audio(audio_array)
-
-                # 使用唯一的临时文件名，避免并发冲突
-                self._recognition_count += 1
-                temp_file = f"temp_recording_{self._recognition_count}.wav"
-
                 # 保存为临时文件
+                temp_file = "temp_recording.wav"
                 wav_write(temp_file, SAMPLE_RATE, (audio_array * 32767).astype(np.int16))
 
                 # 识别
@@ -229,13 +202,7 @@ class SpeechRecognition:
                 audio_duration = len(audio_array) / SAMPLE_RATE
 
                 if audio_duration >= min_speech_duration:
-                    # 音频预处理
-                    audio_array = self._preprocess_audio(audio_array)
-
-                    # 使用唯一的临时文件名
-                    self._recognition_count += 1
-                    temp_file = f"temp_recording_{self._recognition_count}.wav"
-
+                    temp_file = "temp_recording.wav"
                     wav_write(temp_file, SAMPLE_RATE, (audio_array * 32767).astype(np.int16))
                     text = self.transcribe(temp_file)
                     if text:
@@ -266,13 +233,9 @@ class SpeechRecognition:
                                   channels=1)
                 sd.wait()  # 等待录音完成
                 print("录音结束")
-
-                # 音频预处理
-                recording = self._preprocess_audio(recording)
-
-                # 保存为WAV文件（使用唯一文件名）
-                self._recognition_count += 1
-                temp_file = f"temp_recording_{self._recognition_count}.wav"
+                
+                # 保存为WAV文件
+                temp_file = "temp_recording.wav"
                 wav_write(temp_file, SAMPLE_RATE, (recording * 32767).astype(np.int16))
                 return temp_file
             except Exception as e:
@@ -330,17 +293,16 @@ class SpeechRecognition:
             if not self.audio_frames:
                 print("未录制到音频数据")
                 return None
-
-            # 保存为WAV文件（使用唯一文件名）
-            self._recognition_count += 1
-            temp_file = f"temp_recording_{self._recognition_count}.wav"
+            
+            # 保存为WAV文件
+            temp_file = "temp_recording.wav"
             wf = wave.open(temp_file, 'wb')
             wf.setnchannels(1)
             wf.setsampwidth(audio.get_sample_size(pyaudio.paInt16))
             wf.setframerate(SAMPLE_RATE)
             wf.writeframes(b''.join(self.audio_frames))
             wf.close()
-
+            
             return temp_file
         except OSError as e:
             print(f"音频设备错误: {e}")
@@ -366,109 +328,11 @@ class SpeechRecognition:
     def stop_recording(self):
         """停止录音"""
         self.is_recording = False
-
-    def _preprocess_audio(self, audio_array: np.ndarray) -> np.ndarray:
-        """
-        音频预处理：降噪和归一化
-        参考：SpeechBrain、Kaldi等开源项目
-        """
-        # 1. 去除直流分量（DC offset）
-        audio_array = audio_array - np.mean(audio_array)
-
-        # 2. 归一化到[-1, 1]范围
-        max_val = np.max(np.abs(audio_array))
-        if max_val > 0:
-            audio_array = audio_array / max_val
-
-        # 3. 简单的高通滤波，去除低频噪音
-        # 使用一阶差分近似高通滤波器
-        # audio_filtered = np.diff(audio_array, prepend=audio_array[0])
-        # audio_array = audio_filtered * 0.97 + audio_array  # 混合原始信号
-
-        # 4. 限幅，避免削波
-        audio_array = np.clip(audio_array, -1.0, 1.0)
-
-        return audio_array
-
-    def _postprocess_text(self, text: str) -> str:
-        """
-        后处理识别结果，提高准确率
-        参考：OpenAI Whisper最佳实践
-        """
-        if not text:
-            return ""
-
-        # 1. 去除前后空格
-        text = text.strip()
-
-        # 2. 规范化标点符号（将中文标点统一处理）
-        text = text.replace('，', ',').replace('。', '.').replace('、', ',')
-
-        # 3. 去除明显的噪音（单个特殊字符、英文字母等）
-        # 保留中文、数字、基本标点
-        # 去除常见的识别噪音："４"、"Welner Rogers"等英文
-        noise_patterns = [
-            r'\b[A-Za-z]+\s+[A-Za-z]+\b',  # 英文单词组合（如"Welner Rogers"）
-            r'(?<!\d)[４](?!\d)',  # 单独的全角数字４
-            r'\s+$',  # 末尾空格
-            r'^\s+',  # 开头空格
-        ]
-
-        for pattern in noise_patterns:
-            text = re.sub(pattern, '', text)
-
-        # 4. 规范化数字：将中文数字转换为阿拉伯数字
-        chinese_num_map = {
-            '零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
-            '五': '5', '六': '6', '七': '7', '八': '8', '九': '9',
-            '十': '10', '百': '100'
-        }
-
-        # 简单替换（更复杂的转换需要专门的库）
-        for cn, num in chinese_num_map.items():
-            # 只替换在"号"和"分"上下文中的数字
-            text = re.sub(f'({cn})(?=号)', num, text)
-            text = re.sub(f'(?<=号.{{0,20}})({cn})(?=分)', num, text)
-
-        # 5. 去除重复片段（如"2号90分，2号90分"）
-        # 检测并去除重复的模式
-        parts = text.split(',')
-        unique_parts = []
-        seen = set()
-
-        for part in parts:
-            part_clean = part.strip()
-            if part_clean and part_clean not in seen:
-                unique_parts.append(part_clean)
-                seen.add(part_clean)
-
-        text = ','.join(unique_parts)
-
-        # 6. 清理多余的逗号和空格
-        text = re.sub(r',+', ',', text)  # 多个逗号合并为一个
-        text = re.sub(r',\s*$', '', text)  # 去除末尾逗号
-        text = re.sub(r'^\s*,', '', text)  # 去除开头逗号
-        text = re.sub(r'\s+', ' ', text)  # 多个空格合并为一个
-
-        return text.strip()
-
-    def _is_duplicate(self, text: str) -> bool:
-        """检查是否是重复识别"""
-        if not text or not self._last_recognition:
-            return False
-
-        # 简单的字符串相似度比较
-        # 如果新识别结果与上次结果高度相似（编辑距离小）则认为是重复
-        from difflib import SequenceMatcher
-        similarity = SequenceMatcher(None, text, self._last_recognition).ratio()
-
-        return similarity > 0.8  # 相似度超过80%认为是重复
     
     def transcribe(self, audio_file: str, use_prompt: bool = True) -> Optional[str]:
         """
         将音频文件转换为文字
         use_prompt: 是否使用prompt强化识别（优先识别序号+分数格式）
-        参考OpenAI Whisper最佳实践优化
         """
         if self.model is None:
             return None
@@ -480,19 +344,11 @@ class SpeechRecognition:
         try:
             print("正在识别语音...")
 
-            # 构建更丰富的prompt，引导模型识别特定格式
-            # 参考：https://platform.openai.com/docs/guides/speech-to-text/prompting
+            # 构建prompt，引导模型识别特定格式
             prompt = None
             if use_prompt:
-                # 详细的提示，包含：
-                # 1. 格式示例（序号+分数）
-                # 2. 常见数字（1-10, 90-100等高频分数）
-                # 3. 明确的中文上下文
-                prompt = (
-                    "学生成绩登记：一号100分，二号95分，三号92分，四号88分，五号85分。"
-                    "序号从1到10，分数从0到100分。"
-                    "格式：序号加分数，例如一号100分，二号95分。"
-                )
+                # 提示模型识别"X号XX分"的格式
+                prompt = "1号100分，2号95分，3号90分，序号，分数"
 
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:
@@ -502,16 +358,11 @@ class SpeechRecognition:
                     language="zh",
                     vad_filter=True,  # 启用VAD过滤，提高准确率
                     vad_parameters=dict(
-                        min_silence_duration_ms=800,  # 增加到800ms，减少误触发
-                        speech_pad_ms=300,  # 降低到300ms，减少前后噪音
-                        threshold=0.6  # 提高到0.6，更保守的VAD检测
+                        min_silence_duration_ms=500,  # 最小静音持续时间
+                        speech_pad_ms=400,  # 语音片段前后填充
+                        threshold=0.5  # VAD置信度阈值
                     ),
-                    initial_prompt=prompt,  # 添加prompt引导识别
-                    temperature=0.0,  # 设置为0，降低随机性，提高一致性
-                    condition_on_previous_text=False,  # 禁用上下文依赖，避免干扰
-                    compression_ratio_threshold=2.4,  # 默认值，过滤重复内容
-                    no_speech_threshold=0.6,  # 提高无语音阈值，过滤噪音
-                    log_prob_threshold=-1.0,  # 默认值，过滤低概率结果
+                    initial_prompt=prompt  # 添加prompt引导识别
                 )
             except RuntimeError as e:
                 # 如果VAD不可用（缺少onnxruntime），禁用VAD重试
@@ -526,12 +377,7 @@ class SpeechRecognition:
                         beam_size=5,
                         language="zh",
                         vad_filter=False,  # 禁用VAD
-                        initial_prompt=prompt,  # 添加prompt引导识别
-                        temperature=0.0,  # 设置为0，降低随机性
-                        condition_on_previous_text=False,  # 禁用上下文依赖
-                        compression_ratio_threshold=2.4,
-                        no_speech_threshold=0.6,
-                        log_prob_threshold=-1.0,
+                        initial_prompt=prompt  # 添加prompt引导识别
                     )
                 else:
                     raise
@@ -541,28 +387,8 @@ class SpeechRecognition:
             for segment in segments:
                 text += segment.text
 
-            # 原始识别结果
             text = text.strip()
-            print(f"识别结果（原始）: {text}")
-
-            # 后处理：去噪、规范化、去重
-            text = self._postprocess_text(text)
-            print(f"识别结果（处理后）: {text}")
-
-            # 检查是否是重复识别
-            if self._is_duplicate(text):
-                print("检测到重复识别，忽略")
-                # 清理临时文件
-                try:
-                    if os.path.exists(audio_file):
-                        os.remove(audio_file)
-                except:
-                    pass
-                return None
-
-            # 更新上次识别结果
-            if text:
-                self._last_recognition = text
+            print(f"识别结果: {text}")
 
             # 清理临时文件（延迟清理，确保识别完成）
             try:
