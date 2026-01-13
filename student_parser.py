@@ -28,9 +28,13 @@ class StudentParser:
 
         # 繁体字转简体字映射表（常用字）
         self.traditional_to_simplified = {
-            '號': '号', '個': '个', '學': '学', '號': '号',
-            '�畫': '画', '書': '书', '長': '长', '門': '门',
-            '開': '开', '關': '关', '來': '来', '時': '时'
+            '號': '号', '個': '个', '學': '学',
+            '畫': '画', '書': '书', '長': '长', '門': '门',
+            '開': '开', '關': '关', '來': '来', '時': '时',
+            '認': '认', '證': '证', '華': '华', '國': '国',
+            '點': '点', '現': '现', '實': '实', '際': '际',
+            '這': '这', '發': '发', '員': '员', '會': '会',
+            '經': '经', '過': '过', '還': '还', '進': '进'
         }
 
     def _normalize_text(self, text: str) -> str:
@@ -52,15 +56,43 @@ class StudentParser:
         text = re.sub(r'号\s*,', '号,', text)
         text = re.sub(r',\s*号', ',', text)
 
-        # 3. 处理中文数字（支持"二十"、"三十"等）
-        # 先处理组合数字（如"二十"、"三十"）
-        text = re.sub(r'([一二三四五六七八九])十', lambda m: str(int(self.cn_num_map[m.group(1)]) * 10), text)
+        # 3. 处理中文数字（支持"三十七"、"一百"等复杂组合）
+        # 先处理百位数："一百五十" → "150"，"二百" → "200"
+        def convert_hundreds(match):
+            hundreds_digit = match.group(1) if match.group(1) else '一'
+            tens_digit = match.group(2) if match.group(2) else ''
+            ones_digit = match.group(3) if match.group(3) else ''
+
+            result = int(self.cn_num_map.get(hundreds_digit, '1')) * 100
+            if tens_digit:
+                result += int(self.cn_num_map.get(tens_digit, '0')) * 10
+            if ones_digit:
+                result += int(self.cn_num_map.get(ones_digit, '0'))
+            return str(result)
+
+        # 匹配：[一-九]?百[零一-九]?[十]?[一-九]?
+        text = re.sub(r'([一二三四五六七八九])?百([零一二三四五六七八九])?十?([一二三四五六七八九])?',
+                     convert_hundreds, text)
+
+        # 处理十位数："三十七" → "37"，"二十" → "20"
+        def convert_tens(match):
+            tens_digit = match.group(1)
+            ones_digit = match.group(2) if match.group(2) else ''
+
+            result = int(self.cn_num_map[tens_digit]) * 10
+            if ones_digit:
+                result += int(self.cn_num_map[ones_digit])
+            return str(result)
+
+        # 匹配：[一-九]十[一-九]? （如"三十七"、"二十"）
+        text = re.sub(r'([一二三四五六七八九])十([一二三四五六七八九])?', convert_tens, text)
+
         # 处理"十X"（如"十一"、"十二"）
         text = re.sub(r'十([一二三四五六七八九])', lambda m: str(10 + int(self.cn_num_map[m.group(1)])), text)
         # 处理单独的"十"
         text = text.replace('十', '10')
 
-        # 4. 替换单个中文数字
+        # 4. 替换单个中文数字（最后处理，避免干扰组合数字）
         for cn, num in self.cn_num_map.items():
             if cn not in ['十', '百']:  # 十和百已经处理过了
                 text = text.replace(cn, num)
