@@ -344,7 +344,8 @@ class SpeechRecognition:
             print("正在识别语音...")
 
             # 使用prompt引导Whisper优先识别数字（序号和分数）
-            initial_prompt = "一号80分，二号90分，三号100分，第四号85分，5号95分，六号88分"
+            # 增加更多数字示例，特别是两位数
+            initial_prompt = "1号80分，2号90分，3号100分，4号85分，5号95分，6号88分，7号92分，8号87分，9号96分，10号89分，11号93分，12号84分，15号91分，20号86分，25号94分，30号82分，35号97分，40号83分，50号98分，60号99分，70号81分，80号77分，90号88分，100号90分"
 
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:
@@ -353,6 +354,7 @@ class SpeechRecognition:
                     beam_size=5,
                     language="zh",
                     initial_prompt=initial_prompt,  # 引导识别数字格式
+                    temperature=0.0,  # 降低temperature减少随机性，提高数字识别准确率
                     vad_filter=True,  # 启用VAD过滤，提高准确率
                     vad_parameters=dict(min_silence_duration_ms=500)
                 )
@@ -369,6 +371,7 @@ class SpeechRecognition:
                         beam_size=5,
                         language="zh",
                         initial_prompt=initial_prompt,  # 引导识别数字格式
+                        temperature=0.0,  # 降低temperature减少随机性
                         vad_filter=False  # 禁用VAD
                     )
                 else:
