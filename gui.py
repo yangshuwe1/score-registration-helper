@@ -268,6 +268,13 @@ class GradeEntryApp:
 
             # 解析结果（支持多个学生）
             parsed_list = self.student_parser.parse_multiple(text)
+
+            # 调试：显示解析后的结果
+            if parsed_list:
+                for p in parsed_list:
+                    parse_info = f"解析: {p['type']}={p['identifier']}, 分数={p['score']}"
+                    self.root.after(0, lambda info=parse_info: self.log(info))
+
             if not parsed_list:
                 self.root.after(0, lambda: self.status_label.config(
                     text="解析失败，继续监听...请说：姓名/学号，分数", foreground="orange"
@@ -285,14 +292,23 @@ class GradeEntryApp:
             for parsed in parsed_list:
                 # 查找学生
                 if parsed['type'] == 'id':
+                    identifier = parsed['identifier']
+                    self.root.after(0, lambda i=identifier: self.log(
+                        f"查找学号: {i}"
+                    ))
                     row = self.excel_handler.find_student_by_id(parsed['identifier'])
                 else:
+                    identifier = parsed['identifier']
+                    self.root.after(0, lambda i=identifier: self.log(
+                        f"查找姓名: {i}"
+                    ))
                     row = self.excel_handler.find_student_by_name(parsed['identifier'])
 
                 if not row:
                     identifier = parsed['identifier']
-                    self.root.after(0, lambda i=identifier: self.log(
-                        f"未找到学生: {i}，跳过"
+                    parse_type = parsed['type']
+                    self.root.after(0, lambda i=identifier, t=parse_type: self.log(
+                        f"未找到学生: {i} (类型: {t})，跳过"
                     ))
                     continue
 
