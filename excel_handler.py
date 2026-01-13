@@ -12,7 +12,6 @@ from xlutils.copy import copy as xlutils_copy
 import openpyxl
 from openpyxl import load_workbook
 from config import EXCEL_COLUMNS, HEADER_ROWS
-from pypinyin import lazy_pinyin, Style
 
 
 class ExcelHandler:
@@ -105,38 +104,23 @@ class ExcelHandler:
             traceback.print_exc()
             return False
 
-    def find_student_by_sequence(self, sequence: str) -> Optional[int]:
+    def find_student_by_id(self, student_id: str) -> Optional[int]:
         """
-        根据序号查找学生，返回Excel中的行号（1-based，包含表头）
-        序号是从1开始的学生编号，对应Excel中的数据行
+        根据学号查找学生，返回Excel中的行号（1-based，包含表头）
         """
         try:
-            # 转换序号为整数
-            seq_num = int(sequence)
-            if seq_num < 1:
+            # 清理学号字符串
+            student_id = str(student_id).strip()
+            if not student_id:
                 return None
 
-            # 计算Excel行号：序号 + 表头行数
-            # 例如：序号1 -> Excel第3行（假设HEADER_ROWS=2）
-            row = seq_num + HEADER_ROWS
-
-            # 验证行号是否在有效范围内
             if self.is_xls:
-                if self.xls_sheet is None or row > self.xls_sheet.nrows:
-                    print(f"序号{seq_num}超出范围（总学生数：{self.get_total_students()}）")
-                    return None
+                return self._find_in_xls(EXCEL_COLUMNS['student_id'], student_id)
             else:
-                if self.xlsx_ws is None or row > self.xlsx_ws.max_row:
-                    print(f"序号{seq_num}超出范围（总学生数：{self.get_total_students()}）")
-                    return None
+                return self._find_in_xlsx(EXCEL_COLUMNS['student_id'], student_id)
 
-            return row
-
-        except ValueError:
-            print(f"无效的序号: {sequence}")
-            return None
         except Exception as e:
-            print(f"查找序号失败: {e}")
+            print(f"查找学号失败: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -144,7 +128,6 @@ class ExcelHandler:
     def find_student_by_name(self, name: str) -> Optional[int]:
         """
         根据姓名查找学生，返回Excel中的行号（1-based，包含表头）
-        使用拼音模糊化匹配，提高语音识别姓名的准确率
         """
         try:
             name = str(name).strip()
@@ -152,115 +135,15 @@ class ExcelHandler:
                 return None
 
             if self.is_xls:
-                return self._find_by_name_pinyin_xls(name)
+                return self._find_in_xls(EXCEL_COLUMNS['name'], name)
             else:
-                return self._find_by_name_pinyin_xlsx(name)
+                return self._find_in_xlsx(EXCEL_COLUMNS['name'], name)
 
         except Exception as e:
             print(f"查找姓名失败: {e}")
             import traceback
             traceback.print_exc()
             return None
-
-    def _get_pinyin_similarity(self, name1: str, name2: str) -> float:
-        """
-        计算两个姓名的拼音相似度（0-1之间）
-        使用编辑距离算法
-        """
-        # 获取拼音（不带声调）
-        pinyin1 = ''.join(lazy_pinyin(name1, style=Style.NORMAL))
-        pinyin2 = ''.join(lazy_pinyin(name2, style=Style.NORMAL))
-
-        # 计算编辑距离
-        def levenshtein_distance(s1, s2):
-            if len(s1) < len(s2):
-                return levenshtein_distance(s2, s1)
-            if len(s2) == 0:
-                return len(s1)
-
-            previous_row = range(len(s2) + 1)
-            for i, c1 in enumerate(s1):
-                current_row = [i + 1]
-                for j, c2 in enumerate(s2):
-                    insertions = previous_row[j + 1] + 1
-                    deletions = current_row[j] + 1
-                    substitutions = previous_row[j] + (c1 != c2)
-                    current_row.append(min(insertions, deletions, substitutions))
-                previous_row = current_row
-
-            return previous_row[-1]
-
-        distance = levenshtein_distance(pinyin1, pinyin2)
-        max_len = max(len(pinyin1), len(pinyin2))
-
-        if max_len == 0:
-            return 1.0
-
-        # 返回相似度（1 - 标准化的编辑距离）
-        similarity = 1.0 - (distance / max_len)
-        return similarity
-
-    def _find_by_name_pinyin_xls(self, search_name: str) -> Optional[int]:
-        """使用拼音模糊匹配在.xls文件中查找姓名"""
-        if self.xls_sheet is None:
-            return None
-
-        best_match_row = None
-        best_similarity = 0.0
-        similarity_threshold = 0.6  # 相似度阈值
-
-        # 遍历所有学生
-        for row_idx in range(HEADER_ROWS, self.xls_sheet.nrows):
-            cell_value = str(self.xls_sheet.cell_value(row_idx, EXCEL_COLUMNS['name'])).strip()
-
-            # 精确匹配优先
-            if cell_value == search_name:
-                return row_idx + 1
-
-            # 计算拼音相似度
-            similarity = self._get_pinyin_similarity(search_name, cell_value)
-
-            if similarity > best_similarity and similarity >= similarity_threshold:
-                best_similarity = similarity
-                best_match_row = row_idx + 1
-
-        if best_match_row:
-            # 获取匹配到的姓名
-            matched_name = str(self.xls_sheet.cell_value(best_match_row - 1, EXCEL_COLUMNS['name'])).strip()
-            print(f"拼音模糊匹配: '{search_name}' -> '{matched_name}' (相似度: {best_similarity:.2f})")
-
-        return best_match_row
-
-    def _find_by_name_pinyin_xlsx(self, search_name: str) -> Optional[int]:
-        """使用拼音模糊匹配在.xlsx文件中查找姓名"""
-        if self.xlsx_ws is None:
-            return None
-
-        best_match_row = None
-        best_similarity = 0.0
-        similarity_threshold = 0.6  # 相似度阈值
-
-        # 遍历所有学生
-        for row_idx in range(HEADER_ROWS + 1, self.xlsx_ws.max_row + 1):
-            cell_value = str(self.xlsx_ws.cell(row=row_idx, column=EXCEL_COLUMNS['name'] + 1).value or '').strip()
-
-            # 精确匹配优先
-            if cell_value == search_name:
-                return row_idx
-
-            # 计算拼音相似度
-            similarity = self._get_pinyin_similarity(search_name, cell_value)
-
-            if similarity > best_similarity and similarity >= similarity_threshold:
-                best_similarity = similarity
-                best_match_row = row_idx
-
-        if best_match_row:
-            # 获取匹配到的姓名
-            matched_name = str(self.xlsx_ws.cell(row=best_match_row, column=EXCEL_COLUMNS['name'] + 1).value or '').strip()
-            print(f"拼音模糊匹配: '{search_name}' -> '{matched_name}' (相似度: {best_similarity:.2f})")
-
-        return best_match_row
 
     def _find_in_xls(self, col_idx: int, search_value: str) -> Optional[int]:
         """在.xls文件中查找"""

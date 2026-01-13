@@ -277,11 +277,11 @@ class GradeEntryApp:
 
             if not parsed_list:
                 self.root.after(0, lambda: self.status_label.config(
-                    text="解析失败，继续监听...请说：序号/姓名，分数", foreground="orange"
+                    text="解析失败，继续监听...请说：姓名/学号，分数", foreground="orange"
                 ))
                 self.root.after(0, lambda: self.log(f"解析失败，识别文本: {text}"))
                 # 语音提醒
-                self.speech_synthesis.speak_async("解析失败，请说序号或姓名加分数")
+                self.speech_synthesis.speak_async("解析失败，请说学号或姓名加分数")
                 # 不要设置 is_recording = False，继续监听
                 return
 
@@ -291,12 +291,12 @@ class GradeEntryApp:
 
             for parsed in parsed_list:
                 # 查找学生
-                if parsed['type'] == 'sequence':
+                if parsed['type'] == 'id':
                     identifier = parsed['identifier']
                     self.root.after(0, lambda i=identifier: self.log(
-                        f"查找序号: {i}"
+                        f"查找学号: {i}"
                     ))
-                    row = self.excel_handler.find_student_by_sequence(parsed['identifier'])
+                    row = self.excel_handler.find_student_by_id(parsed['identifier'])
                 else:
                     identifier = parsed['identifier']
                     self.root.after(0, lambda i=identifier: self.log(
@@ -442,7 +442,7 @@ class GradeEntryApp:
             parsed = self.student_parser.parse(text)
             if not parsed:
                 self.root.after(0, lambda: self.status_label.config(
-                    text="解析失败，请说：序号/姓名，分数", foreground="red"
+                    text="解析失败，请说：姓名/学号，分数", foreground="red"
                 ))
                 self.root.after(0, lambda: self.log(f"解析失败，识别文本: {text}"))
                 self.root.after(0, lambda: self.record_button.config(text="开始录音"))
@@ -450,8 +450,8 @@ class GradeEntryApp:
                 return
             
             # 查找学生
-            if parsed['type'] == 'sequence':
-                row = self.excel_handler.find_student_by_sequence(parsed['identifier'])
+            if parsed['type'] == 'id':
+                row = self.excel_handler.find_student_by_id(parsed['identifier'])
             else:
                 row = self.excel_handler.find_student_by_name(parsed['identifier'])
             
