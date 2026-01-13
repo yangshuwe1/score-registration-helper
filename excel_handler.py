@@ -104,23 +104,34 @@ class ExcelHandler:
             traceback.print_exc()
             return False
 
-    def find_student_by_id(self, student_id: str) -> Optional[int]:
+    def find_student_by_sequence(self, sequence: int) -> Optional[int]:
         """
-        根据学号查找学生，返回Excel中的行号（1-based，包含表头）
+        根据序号查找学生，返回Excel中的行号（1-based，包含表头）
+        序号是从1开始的数据行序号（跳过表头）
+        例如：序号1 = Excel第3行（跳过2行表头）
         """
         try:
-            # 清理学号字符串
-            student_id = str(student_id).strip()
-            if not student_id:
+            if sequence < 1:
+                print(f"序号必须大于0: {sequence}")
                 return None
 
+            # 计算Excel行号：序号 + 表头行数
+            row = sequence + self.header_rows
+
+            # 验证行号是否有效
             if self.is_xls:
-                return self._find_in_xls(EXCEL_COLUMNS['student_id'], student_id)
+                if self.xls_sheet is None or row > self.xls_sheet.nrows:
+                    print(f"序号超出范围: {sequence}（总共{self.get_total_students()}个学生）")
+                    return None
             else:
-                return self._find_in_xlsx(EXCEL_COLUMNS['student_id'], student_id)
+                if self.xlsx_ws is None or row > self.xlsx_ws.max_row:
+                    print(f"序号超出范围: {sequence}（总共{self.get_total_students()}个学生）")
+                    return None
+
+            return row
 
         except Exception as e:
-            print(f"查找学号失败: {e}")
+            print(f"查找序号失败: {e}")
             import traceback
             traceback.print_exc()
             return None
