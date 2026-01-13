@@ -1,10 +1,23 @@
 """
 登分助手主程序
 """
+# -*- coding: utf-8 -*-
 import sys
+import os
 import traceback
 import tkinter as tk
 from tkinter import messagebox
+
+# 确保在 Windows 系统上使用 UTF-8 编码
+if sys.platform == 'win32':
+    try:
+        import io
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'buffer'):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass  # 如果无法设置编码，忽略错误
 
 def main():
     """主函数，带错误处理"""
