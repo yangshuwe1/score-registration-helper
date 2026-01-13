@@ -251,11 +251,10 @@ class GradeEntryApp:
             """说话结束后的回调"""
             if not text:
                 self.root.after(0, lambda: self.status_label.config(
-                    text="识别失败，请重试", foreground="red"
+                    text="识别失败，继续监听...", foreground="orange"
                 ))
                 self.root.after(0, lambda: self.log("语音识别失败，请检查录音质量"))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
+                # 不要设置 is_recording = False，继续监听
                 return
             
             # 显示识别结果
@@ -269,11 +268,10 @@ class GradeEntryApp:
             parsed_list = self.student_parser.parse_multiple(text)
             if not parsed_list:
                 self.root.after(0, lambda: self.status_label.config(
-                    text="解析失败，请说：姓名/学号，分数", foreground="red"
+                    text="解析失败，继续监听...请说：姓名/学号，分数", foreground="orange"
                 ))
                 self.root.after(0, lambda: self.log(f"解析失败，识别文本: {text}"))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
+                # 不要设置 is_recording = False，继续监听
                 return
 
             # 处理所有解析出的学生信息
@@ -347,21 +345,33 @@ class GradeEntryApp:
             
             # 继续监听（不重置按钮，保持录音状态）
             # 用户可以继续说下一个，或点击停止
-        
+
         try:
-            # 启动实时录音
-            success = self.speech_recognition.record_audio_realtime(
-                on_speech_end=on_speech_end,
-                silence_duration=1.5,  # 静音1.5秒后认为说话结束
-                min_speech_duration=0.5  # 最少0.5秒才识别
-            )
-            
-            if not success and self.is_recording:
-                self.root.after(0, lambda: self.status_label.config(
-                    text="录音失败，请检查麦克风", foreground="red"
-                ))
-                self.root.after(0, lambda: self.record_button.config(text="开始录音"))
-                self.is_recording = False
+            # 循环录音，直到用户点击停止
+            while self.is_recording:
+                # 启动实时录音
+                success = self.speech_recognition.record_audio_realtime(
+                    on_speech_end=on_speech_end,
+                    silence_duration=1.5,  # 静音1.5秒后认为说话结束
+                    min_speech_duration=0.5  # 最少0.5秒才识别
+                )
+
+                if not success and self.is_recording:
+                    self.root.after(0, lambda: self.status_label.config(
+                        text="录音失败，请检查麦克风", foreground="red"
+                    ))
+                    self.root.after(0, lambda: self.record_button.config(text="开始录音"))
+                    self.is_recording = False
+                    break
+
+                # 如果还在录音状态，继续下一次循环（自动开始下一次录音）
+                if self.is_recording:
+                    self.root.after(0, lambda: self.status_label.config(
+                        text="继续监听...（说完后自动识别）", foreground="green"
+                    ))
+
+            # 循环结束，重置按钮
+            self.root.after(0, lambda: self.record_button.config(text="开始录音"))
         except Exception as e:
             import traceback
             error_msg = str(e)
