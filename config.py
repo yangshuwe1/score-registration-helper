@@ -15,7 +15,7 @@ HEADER_ROWS = 2  # 前2行是表头（说明行和列名行）
 # 语音识别配置
 # 模型选择: "tiny"(最快,最小), "small"(快,小), "base"(平衡), "medium"(慢,准确), "large"(最慢,最准确)
 # 如果遇到内存不足或加载慢，可以改为 "small" 或 "tiny"
-WHISPER_MODEL = "base"  # 使用base模型，平衡速度和准确率
+WHISPER_MODEL = "large"  # 使用base模型，平衡速度和准确率
 WHISPER_DEVICE = "cpu"  # 使用CPU，兼容性更好
 WHISPER_COMPUTE_TYPE = "int8"  # 量化模型，降低延迟和内存占用
 
