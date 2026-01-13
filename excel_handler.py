@@ -104,38 +104,6 @@ class ExcelHandler:
             traceback.print_exc()
             return False
 
-    def find_student_by_sequence(self, sequence: int) -> Optional[int]:
-        """
-        根据序号查找学生，返回Excel中的行号（1-based，包含表头）
-        sequence: 序号（1表示第1个学生，2表示第2个学生...）
-        """
-        try:
-            if sequence < 1:
-                print(f"无效的序号: {sequence}")
-                return None
-
-            # 计算Excel行号：row = HEADER_ROWS + sequence
-            # 例如：sequence=1 -> row=3（第3行，第1个学生）
-            row = self.header_rows + sequence
-
-            # 验证行号是否在有效范围内
-            if self.is_xls:
-                if row > self.xls_sheet.nrows:
-                    print(f"序号{sequence}超出范围（共{self.xls_sheet.nrows - self.header_rows}个学生）")
-                    return None
-            else:
-                if row > self.xlsx_ws.max_row:
-                    print(f"序号{sequence}超出范围（共{self.xlsx_ws.max_row - self.header_rows}个学生）")
-                    return None
-
-            return row
-
-        except Exception as e:
-            print(f"根据序号查找失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-
     def find_student_by_id(self, student_id: str) -> Optional[int]:
         """
         根据学号查找学生，返回Excel中的行号（1-based，包含表头）
@@ -160,138 +128,22 @@ class ExcelHandler:
     def find_student_by_name(self, name: str) -> Optional[int]:
         """
         根据姓名查找学生，返回Excel中的行号（1-based，包含表头）
-        支持拼音模糊匹配
         """
         try:
             name = str(name).strip()
             if not name:
                 return None
 
-            # 先尝试精确匹配
             if self.is_xls:
-                result = self._find_in_xls(EXCEL_COLUMNS['name'], name)
+                return self._find_in_xls(EXCEL_COLUMNS['name'], name)
             else:
-                result = self._find_in_xlsx(EXCEL_COLUMNS['name'], name)
-
-            if result:
-                return result
-
-            # 精确匹配失败，尝试拼音模糊匹配
-            print(f"精确匹配失败，尝试拼音模糊匹配: {name}")
-            return self._find_by_pinyin_fuzzy(name)
+                return self._find_in_xlsx(EXCEL_COLUMNS['name'], name)
 
         except Exception as e:
             print(f"查找姓名失败: {e}")
             import traceback
             traceback.print_exc()
             return None
-
-    def _find_by_pinyin_fuzzy(self, name: str) -> Optional[int]:
-        """
-        使用拼音模糊匹配查找姓名
-        """
-        try:
-            # 尝试安装pypinyin（如果已安装则直接使用）
-            try:
-                from pypinyin import lazy_pinyin, Style
-                has_pypinyin = True
-            except ImportError:
-                has_pypinyin = False
-                print("提示: 安装pypinyin可以提高姓名识别准确率: pip install pypinyin")
-
-            if not has_pypinyin:
-                # 没有pypinyin，使用简单的字符相似度匹配
-                return self._find_by_char_similarity(name)
-
-            # 获取输入姓名的拼音
-            input_pinyin = ''.join(lazy_pinyin(name, style=Style.NORMAL))
-
-            # 遍历所有学生，计算拼音相似度
-            best_match = None
-            best_score = 0
-
-            if self.is_xls:
-                for row_idx in range(self.header_rows, self.xls_sheet.nrows):
-                    student_name = str(self.xls_sheet.cell_value(row_idx, EXCEL_COLUMNS['name'])).strip()
-                    if student_name:
-                        name_pinyin = ''.join(lazy_pinyin(student_name, style=Style.NORMAL))
-                        score = self._calculate_similarity(input_pinyin, name_pinyin)
-                        if score > best_score and score > 0.6:  # 相似度阈值60%
-                            best_score = score
-                            best_match = row_idx + 1
-            else:
-                for row_idx in range(self.header_rows + 1, self.xlsx_ws.max_row + 1):
-                    student_name = str(self.xlsx_ws.cell(row=row_idx, column=EXCEL_COLUMNS['name'] + 1).value or '').strip()
-                    if student_name:
-                        name_pinyin = ''.join(lazy_pinyin(student_name, style=Style.NORMAL))
-                        score = self._calculate_similarity(input_pinyin, name_pinyin)
-                        if score > best_score and score > 0.6:
-                            best_score = score
-                            best_match = row_idx
-
-            if best_match:
-                print(f"拼音模糊匹配成功，相似度: {best_score:.2f}")
-            return best_match
-
-        except Exception as e:
-            print(f"拼音模糊匹配失败: {e}")
-            return None
-
-    def _find_by_char_similarity(self, name: str) -> Optional[int]:
-        """
-        使用字符相似度匹配（备用方案）
-        """
-        best_match = None
-        best_score = 0
-
-        if self.is_xls:
-            for row_idx in range(self.header_rows, self.xls_sheet.nrows):
-                student_name = str(self.xls_sheet.cell_value(row_idx, EXCEL_COLUMNS['name'])).strip()
-                if student_name:
-                    score = self._calculate_similarity(name, student_name)
-                    if score > best_score and score > 0.5:  # 相似度阈值50%
-                        best_score = score
-                        best_match = row_idx + 1
-        else:
-            for row_idx in range(self.header_rows + 1, self.xlsx_ws.max_row + 1):
-                student_name = str(self.xlsx_ws.cell(row=row_idx, column=EXCEL_COLUMNS['name'] + 1).value or '').strip()
-                if student_name:
-                    score = self._calculate_similarity(name, student_name)
-                    if score > best_score and score > 0.5:
-                        best_score = score
-                        best_match = row_idx
-
-        if best_match:
-            print(f"字符相似度匹配成功，相似度: {best_score:.2f}")
-        return best_match
-
-    def _calculate_similarity(self, s1: str, s2: str) -> float:
-        """
-        计算两个字符串的相似度（使用编辑距离）
-        """
-        if not s1 or not s2:
-            return 0.0
-
-        # 简单的编辑距离算法
-        m, n = len(s1), len(s2)
-        dp = [[0] * (n + 1) for _ in range(m + 1)]
-
-        for i in range(m + 1):
-            dp[i][0] = i
-        for j in range(n + 1):
-            dp[0][j] = j
-
-        for i in range(1, m + 1):
-            for j in range(1, n + 1):
-                if s1[i-1] == s2[j-1]:
-                    dp[i][j] = dp[i-1][j-1]
-                else:
-                    dp[i][j] = min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]) + 1
-
-        distance = dp[m][n]
-        max_len = max(m, n)
-        similarity = 1 - (distance / max_len)
-        return similarity
 
     def _find_in_xls(self, col_idx: int, search_value: str) -> Optional[int]:
         """在.xls文件中查找"""
