@@ -329,19 +329,26 @@ class SpeechRecognition:
         """停止录音"""
         self.is_recording = False
     
-    def transcribe(self, audio_file: str) -> Optional[str]:
+    def transcribe(self, audio_file: str, use_prompt: bool = True) -> Optional[str]:
         """
         将音频文件转换为文字
+        use_prompt: 是否使用prompt强化识别（优先识别序号+分数格式）
         """
         if self.model is None:
             return None
-        
+
         if not os.path.exists(audio_file):
             print(f"音频文件不存在: {audio_file}")
             return None
-        
+
         try:
             print("正在识别语音...")
+
+            # 构建prompt，引导模型识别特定格式
+            prompt = None
+            if use_prompt:
+                # 提示模型识别"X号XX分"的格式
+                prompt = "1号100分，2号95分，3号90分，序号，分数"
 
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:
@@ -350,11 +357,16 @@ class SpeechRecognition:
                     beam_size=5,
                     language="zh",
                     vad_filter=True,  # 启用VAD过滤，提高准确率
-                    vad_parameters=dict(min_silence_duration_ms=500)
+                    vad_parameters=dict(
+                        min_silence_duration_ms=500,  # 最小静音持续时间
+                        speech_pad_ms=400,  # 语音片段前后填充
+                        threshold=0.5  # VAD置信度阈值
+                    ),
+                    initial_prompt=prompt  # 添加prompt引导识别
                 )
             except RuntimeError as e:
                 # 如果VAD不可用（缺少onnxruntime），禁用VAD重试
-                if "onnxruntime" in str(e):
+                if "onnxruntime" in str(e).lower():
                     # 只在第一次显示警告
                     if not self._vad_warning_shown:
                         print("提示: VAD过滤器不可用（缺少onnxruntime），使用标准模式")
@@ -364,7 +376,8 @@ class SpeechRecognition:
                         audio_file,
                         beam_size=5,
                         language="zh",
-                        vad_filter=False  # 禁用VAD
+                        vad_filter=False,  # 禁用VAD
+                        initial_prompt=prompt  # 添加prompt引导识别
                     )
                 else:
                     raise
