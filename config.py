@@ -6,7 +6,7 @@ EXCEL_COLUMNS = {
     'student_id': 0,      # A列：学号*
     'name': 1,            # B列：姓名*
     'regular_score': 4,   # E列：平时成绩
-    'final_score': 8      # I列：总成绩
+    'final_score': 8      # I列：期末成绩
 }
 
 # 表头行数配置

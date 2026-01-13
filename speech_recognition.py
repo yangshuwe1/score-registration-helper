@@ -346,7 +346,12 @@ class SpeechRecognition:
             # 添加 initial_prompt 来引导 whisper 识别特定格式
             # 这个 prompt 会告诉 whisper 我们期望的输入格式，提高识别准确率
             # 注意：不要在 prompt 中包含具体例子，否则 whisper 会学习这些内容
-            initial_prompt = "成绩登记：序号加分数，或姓名加分数。"
+            initial_prompt = (
+                "成绩登记系统。"
+                "用户只会输入学生序号和分数，或者学生姓名和分数。"
+                "序号是阿拉伯数字加号字，分数是阿拉伯数字加分字。"
+                "不会说其他无关内容。"
+            )
 
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:

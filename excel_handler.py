@@ -4,14 +4,59 @@ Excel文件处理模块
 支持旧的.xls格式和新的.xlsx格式
 """
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import xlrd
 from xlrd import open_workbook
 import xlwt
 from xlutils.copy import copy as xlutils_copy
 import openpyxl
 from openpyxl import load_workbook
+from pypinyin import lazy_pinyin
 from config import EXCEL_COLUMNS, HEADER_ROWS
+
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    计算两个字符串的编辑距离（Levenshtein Distance）
+    """
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # j+1 instead of j since previous_row and current_row are one character longer
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
+def name_to_pinyin(name: str) -> str:
+    """
+    将中文姓名转换为拼音（小写，无音调）
+    """
+    pinyin_list = lazy_pinyin(name)
+    return ''.join(pinyin_list).lower()
+
+
+def fuzzy_match_name(search_name: str, candidate_name: str, max_distance: int = 1) -> bool:
+    """
+    使用拼音进行姓名模糊匹配
+    允许最多 max_distance 个字符的差异
+    """
+    search_pinyin = name_to_pinyin(search_name)
+    candidate_pinyin = name_to_pinyin(candidate_name)
+
+    distance = levenshtein_distance(search_pinyin, candidate_pinyin)
+    return distance <= max_distance
 
 
 class ExcelHandler:
@@ -139,16 +184,30 @@ class ExcelHandler:
     def find_student_by_name(self, name: str) -> Optional[int]:
         """
         根据姓名查找学生，返回Excel中的行号（1-based，包含表头）
+        支持拼音模糊匹配：
+        1. 先尝试精确匹配
+        2. 如果失败，使用拼音模糊匹配（允许1个字符差异）
         """
         try:
             name = str(name).strip()
             if not name:
                 return None
 
+            # 第一步：精确匹配
             if self.is_xls:
-                return self._find_in_xls(EXCEL_COLUMNS['name'], name)
+                result = self._find_in_xls(EXCEL_COLUMNS['name'], name)
             else:
-                return self._find_in_xlsx(EXCEL_COLUMNS['name'], name)
+                result = self._find_in_xlsx(EXCEL_COLUMNS['name'], name)
+
+            if result is not None:
+                return result
+
+            # 第二步：拼音模糊匹配
+            print(f"精确匹配失败，尝试拼音模糊匹配: {name}")
+            if self.is_xls:
+                return self._fuzzy_find_in_xls(name)
+            else:
+                return self._fuzzy_find_in_xlsx(name)
 
         except Exception as e:
             print(f"查找姓名失败: {e}")
@@ -213,6 +272,70 @@ class ExcelHandler:
 
         return None
 
+    def _fuzzy_find_in_xls(self, search_name: str) -> Optional[int]:
+        """
+        在.xls文件中使用拼音进行模糊匹配
+        允许1个字符的编辑距离
+        """
+        if self.xls_sheet is None:
+            return None
+
+        name_col = EXCEL_COLUMNS['name']
+        best_match_row = None
+        best_distance = float('inf')
+
+        # 遍历所有学生姓名
+        for row_idx in range(self.header_rows, self.xls_sheet.nrows):
+            cell_value = str(self.xls_sheet.cell_value(row_idx, name_col)).strip()
+
+            if fuzzy_match_name(search_name, cell_value, max_distance=1):
+                # 找到匹配的，计算距离
+                search_pinyin = name_to_pinyin(search_name)
+                candidate_pinyin = name_to_pinyin(cell_value)
+                distance = levenshtein_distance(search_pinyin, candidate_pinyin)
+
+                # 保留最佳匹配
+                if distance < best_distance:
+                    best_distance = distance
+                    best_match_row = row_idx + 1  # 返回1-based行号
+
+        if best_match_row:
+            print(f"拼音模糊匹配成功: {search_name} -> 行{best_match_row} (编辑距离: {best_distance})")
+
+        return best_match_row
+
+    def _fuzzy_find_in_xlsx(self, search_name: str) -> Optional[int]:
+        """
+        在.xlsx文件中使用拼音进行模糊匹配
+        允许1个字符的编辑距离
+        """
+        if self.xlsx_ws is None:
+            return None
+
+        name_col = EXCEL_COLUMNS['name']
+        best_match_row = None
+        best_distance = float('inf')
+
+        # 遍历所有学生姓名
+        for row_idx in range(self.header_rows + 1, self.xlsx_ws.max_row + 1):
+            cell_value = str(self.xlsx_ws.cell(row=row_idx, column=name_col + 1).value or '').strip()
+
+            if fuzzy_match_name(search_name, cell_value, max_distance=1):
+                # 找到匹配的，计算距离
+                search_pinyin = name_to_pinyin(search_name)
+                candidate_pinyin = name_to_pinyin(cell_value)
+                distance = levenshtein_distance(search_pinyin, candidate_pinyin)
+
+                # 保留最佳匹配
+                if distance < best_distance:
+                    best_distance = distance
+                    best_match_row = row_idx
+
+        if best_match_row:
+            print(f"拼音模糊匹配成功: {search_name} -> 行{best_match_row} (编辑距离: {best_distance})")
+
+        return best_match_row
+
     def get_student_info(self, row: int) -> Optional[dict]:
         """
         获取指定行的学生信息
@@ -237,6 +360,40 @@ class ExcelHandler:
             }
         except Exception as e:
             print(f"获取学生信息失败: {e}")
+            return None
+
+    def get_score(self, row: int, column_type: str) -> Optional[float]:
+        """
+        获取指定行的成绩
+        row: Excel行号（1-based）
+        column_type: 'regular_score' 或 'final_score'
+        返回: 分数（可能是None）
+        """
+        try:
+            # 确定列
+            if column_type == 'regular_score':
+                col_idx = EXCEL_COLUMNS['regular_score']
+            elif column_type == 'final_score':
+                col_idx = EXCEL_COLUMNS['final_score']
+            else:
+                return None
+
+            if self.is_xls:
+                if self.xls_sheet is None or row < 1 or row > self.xls_sheet.nrows:
+                    return None
+                cell_value = self.xls_sheet.cell_value(row - 1, col_idx)
+            else:
+                if self.xlsx_ws is None or row < 1 or row > self.xlsx_ws.max_row:
+                    return None
+                cell_value = self.xlsx_ws.cell(row=row, column=col_idx + 1).value
+
+            # 尝试转换为浮点数
+            if cell_value is None or cell_value == '':
+                return None
+            return float(cell_value)
+
+        except Exception as e:
+            print(f"获取成绩失败: {e}")
             return None
 
     def update_score(self, row: int, column_type: str, score: float) -> bool:

@@ -41,8 +41,9 @@ class GradeEntryApp:
         init_thread.start()
         
         # 状态变量
-        self.current_column = 'final_score'  # 默认总成绩
+        self.current_column = 'final_score'  # 默认期末成绩
         self.is_recording = False
+        self.last_operation = None  # 上一步操作缓存：{'row': int, 'column': str, 'old_score': float, 'new_score': float, 'name': str}
     
     def _initialize_modules(self):
         """在后台线程中初始化模块（带详细进度提示）"""
@@ -150,7 +151,7 @@ class GradeEntryApp:
         
         self.column_var = tk.StringVar(value="final_score")
         ttk.Radiobutton(
-            column_frame, text="总成绩", variable=self.column_var,
+            column_frame, text="期末成绩", variable=self.column_var,
             value="final_score", command=self._on_column_change
         ).grid(row=0, column=0, padx=10)
         ttk.Radiobutton(
@@ -214,7 +215,7 @@ class GradeEntryApp:
     def _on_column_change(self):
         """列选择改变"""
         self.current_column = self.column_var.get()
-        column_name = "总成绩" if self.current_column == "final_score" else "平时成绩"
+        column_name = "期末成绩" if self.current_column == "final_score" else "平时成绩"
         self.log(f"已切换到: {column_name}")
     
     def _toggle_recording(self):
@@ -266,6 +267,11 @@ class GradeEntryApp:
             self.root.after(0, lambda: self.status_label.config(
                 text="正在处理...", foreground="blue"
             ))
+
+            # 检查是否是撤回命令
+            if self.student_parser.is_undo_command(text):
+                self._handle_undo()
+                return
 
             # 解析结果（支持多个学生）
             parsed_list = self.student_parser.parse_multiple(text)
@@ -319,11 +325,23 @@ class GradeEntryApp:
                     self.root.after(0, lambda: self.log("获取学生信息失败，跳过"))
                     continue
 
+                # 获取旧成绩（用于撤回）
+                old_score = self.excel_handler.get_score(row, self.current_column)
+
                 # 更新成绩
                 if not self.excel_handler.update_score(row, self.current_column, parsed['score']):
                     score = parsed['score']
                     self.root.after(0, lambda s=score: self.log(f"更新成绩失败，分数: {s}，跳过"))
                     continue
+
+                # 保存上一步操作（用于撤回）
+                self.last_operation = {
+                    'row': row,
+                    'column': self.current_column,
+                    'old_score': old_score,
+                    'new_score': parsed['score'],
+                    'name': student_info['name']
+                }
 
                 # 生成确认文本
                 confirmation = self.student_parser.format_confirmation(
@@ -527,7 +545,69 @@ class GradeEntryApp:
             self.root.after(0, lambda: self.log(f"详细错误: {traceback.format_exc()}"))
             self.root.after(0, lambda: self.record_button.config(text="开始录音"))
             self.is_recording = False
-    
+
+    def _handle_undo(self):
+        """处理撤回命令"""
+        if self.last_operation is None:
+            self.root.after(0, lambda: self.status_label.config(
+                text="没有可撤回的操作", foreground="orange"
+            ))
+            self.root.after(0, lambda: self.log("没有可撤回的操作"))
+            self.speech_synthesis.speak_async("没有可撤回的操作")
+            return
+
+        # 获取上一步操作信息
+        row = self.last_operation['row']
+        column = self.last_operation['column']
+        old_score = self.last_operation['old_score']
+        new_score = self.last_operation['new_score']
+        name = self.last_operation['name']
+
+        self.root.after(0, lambda: self.log(
+            f"撤回操作: {name}，{new_score}分 -> {old_score if old_score is not None else '空'}分"
+        ))
+
+        # 恢复旧分数
+        if old_score is None:
+            # 如果旧分数是None，清空单元格（设置为空字符串或0）
+            # 这里我们设置为None，Excel会显示为空
+            success = self.excel_handler.update_score(row, column, 0)  # 暂时设为0
+            self.root.after(0, lambda: self.log("警告: 原分数为空，已设置为0"))
+        else:
+            success = self.excel_handler.update_score(row, column, old_score)
+
+        if not success:
+            self.root.after(0, lambda: self.status_label.config(
+                text="撤回失败", foreground="red"
+            ))
+            self.root.after(0, lambda: self.log("撤回失败：无法更新成绩"))
+            self.speech_synthesis.speak_async("撤回失败")
+            return
+
+        # 保存文件
+        if not self.excel_handler.save_excel():
+            self.root.after(0, lambda: self.status_label.config(
+                text="保存失败，文件可能被占用", foreground="red"
+            ))
+            self.root.after(0, lambda: messagebox.showwarning(
+                "保存失败", "请关闭Excel文件后重试"
+            ))
+            self.speech_synthesis.speak_async("保存失败")
+            return
+
+        # 撤回成功
+        self.root.after(0, lambda: self.status_label.config(
+            text=f"已撤回: {name}，恢复为{old_score if old_score is not None else '空'}分", foreground="green"
+        ))
+        self.root.after(0, lambda: self.log(f"撤回成功: {name}"))
+
+        # 语音播报
+        score_text = f"{old_score}分" if old_score is not None else "空"
+        self.speech_synthesis.speak_async(f"已撤回，{name}，恢复为{score_text}")
+
+        # 清空last_operation，防止重复撤回
+        self.last_operation = None
+
     def log(self, message: str):
         """添加日志"""
         self.log_text.config(state=tk.NORMAL)

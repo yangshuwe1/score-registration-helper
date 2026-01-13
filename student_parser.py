@@ -98,7 +98,20 @@ class StudentParser:
                 text = text.replace(cn, num)
 
         return text
-    
+
+    def is_undo_command(self, text: str) -> bool:
+        """
+        检测是否是撤回命令
+        识别关键词：撤回、回退、撤销、撤、回撤、取消
+        """
+        if not text:
+            return False
+
+        text = text.strip().lower()
+        undo_keywords = ['撤回', '回退', '撤销', '撤', '回撤', '取消', '撤消']
+
+        return any(keyword in text for keyword in undo_keywords)
+
     def parse(self, text: str) -> Optional[Dict[str, any]]:
         """
         解析语音识别结果

@@ -11,6 +11,7 @@ edge-tts>=6.1.0
 numpy>=1.24.0
 torch>=2.0.0
 pyinstaller>=5.13.0
+pypinyin>=0.50.0  # 用于姓名拼音转换和模糊匹配
 
 # 语音识别依赖（需要先安装）
 # tokenizers 已安装: 0.22.2
