@@ -12,21 +12,29 @@ from speech_recognition import SpeechRecognition
 from speech_synthesis import SpeechSynthesis
 from student_parser import StudentParser
 from config import RECORD_DURATION
+from config_manager import ConfigManager
 
 
 class GradeEntryApp:
     def __init__(self, root):
         self.root = root
         self.root.title("登分助手")
-        self.root.geometry("800x600")
+
+        # 初始化配置管理器
+        self.config_manager = ConfigManager()
+
+        # 从配置中读取窗口大小
+        window_width = self.config_manager.get('window_width', 900)
+        window_height = self.config_manager.get('window_height', 700)
+        self.root.geometry(f"{window_width}x{window_height}")
         self.root.resizable(True, True)
-        
+
         # 创建界面（先创建，再加载模型）
         self._create_widgets()
-        
+
         # 显示加载提示
         self.status_label.config(
-            text="正在初始化...（首次运行需要下载模型，请耐心等待）", 
+            text="正在初始化...（首次运行需要下载模型，请耐心等待）",
             foreground="blue"
         )
         self.log("=" * 50)
@@ -35,13 +43,13 @@ class GradeEntryApp:
         self.log("     如果网络较慢，可能需要几分钟时间")
         self.log("     程序正在后台加载，请勿关闭窗口")
         self.log("=" * 50)
-        
+
         # 在后台线程中初始化模块（避免阻塞界面）
         init_thread = threading.Thread(target=self._initialize_modules, daemon=True)
         init_thread.start()
-        
+
         # 状态变量
-        self.current_column = 'final_score'  # 默认期末成绩
+        self.current_column = self.config_manager.get('current_column', 'final_score')
         self.is_recording = False
         self.last_operation = None  # 上一步操作缓存：{'row': int, 'column': str, 'old_score': float, 'new_score': float, 'name': str}
     
@@ -128,12 +136,16 @@ class GradeEntryApp:
                 self.root.after(0, lambda: self.log(f"详细: {traceback.format_exc()}"))
     
     def _create_widgets(self):
-        """创建界面组件"""
-        # 主框架
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        """创建界面组件（使用标签页）"""
+        # 创建Notebook（标签页）
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+        # 创建主界面标签页
+        main_frame = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(main_frame, text="主界面")
         main_frame.columnconfigure(1, weight=1)
         
         # 1. 文件选择区域
@@ -193,7 +205,305 @@ class GradeEntryApp:
         self.log_text = scrolledtext.ScrolledText(log_frame, height=10, wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.log_text.config(state=tk.DISABLED)
-    
+
+        # 创建设置标签页
+        self._create_settings_tab()
+
+    def _create_settings_tab(self):
+        """创建设置标签页"""
+        settings_frame = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(settings_frame, text="设置")
+
+        # 1. 模型配置区域
+        model_frame = ttk.LabelFrame(settings_frame, text="语音识别模型配置", padding="10")
+        model_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=5, padx=5)
+        settings_frame.columnconfigure(0, weight=1)
+
+        # 模型版本选择
+        ttk.Label(model_frame, text="模型版本:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.model_var = tk.StringVar(value=self.config_manager.get('whisper_model', 'medium'))
+        model_combo = ttk.Combobox(
+            model_frame,
+            textvariable=self.model_var,
+            values=['tiny', 'small', 'base', 'medium', 'large'],
+            state='readonly',
+            width=15
+        )
+        model_combo.grid(row=0, column=1, sticky=tk.W, pady=5, padx=5)
+        ttk.Label(
+            model_frame,
+            text="(tiny最快但不太准确, large最准确但较慢)",
+            foreground="gray"
+        ).grid(row=0, column=2, sticky=tk.W, pady=5, padx=5)
+
+        # 设备选择
+        ttk.Label(model_frame, text="计算设备:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.device_var = tk.StringVar(value=self.config_manager.get('whisper_device', 'cpu'))
+        device_combo = ttk.Combobox(
+            model_frame,
+            textvariable=self.device_var,
+            values=['cpu', 'cuda'],
+            state='readonly',
+            width=15
+        )
+        device_combo.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
+        ttk.Label(
+            model_frame,
+            text="(cuda需要NVIDIA显卡支持)",
+            foreground="gray"
+        ).grid(row=1, column=2, sticky=tk.W, pady=5, padx=5)
+
+        # 计算类型
+        ttk.Label(model_frame, text="计算精度:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.compute_type_var = tk.StringVar(value=self.config_manager.get('whisper_compute_type', 'int8'))
+        compute_type_combo = ttk.Combobox(
+            model_frame,
+            textvariable=self.compute_type_var,
+            values=['int8', 'float16', 'float32'],
+            state='readonly',
+            width=15
+        )
+        compute_type_combo.grid(row=2, column=1, sticky=tk.W, pady=5, padx=5)
+        ttk.Label(
+            model_frame,
+            text="(int8速度快内存少, float32精度高但慢)",
+            foreground="gray"
+        ).grid(row=2, column=2, sticky=tk.W, pady=5, padx=5)
+
+        # 2. 录音配置区域
+        record_frame = ttk.LabelFrame(settings_frame, text="录音配置", padding="10")
+        record_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=5, padx=5)
+
+        # 最大录音时长
+        ttk.Label(record_frame, text="最大录音时长(秒):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.duration_var = tk.DoubleVar(value=self.config_manager.get('record_duration', 5))
+        duration_scale = ttk.Scale(
+            record_frame,
+            from_=1,
+            to=10,
+            variable=self.duration_var,
+            orient=tk.HORIZONTAL,
+            length=200
+        )
+        duration_scale.grid(row=0, column=1, sticky=tk.W, pady=5, padx=5)
+        self.duration_label = ttk.Label(record_frame, text=f"{self.duration_var.get():.1f}秒")
+        self.duration_label.grid(row=0, column=2, sticky=tk.W, pady=5, padx=5)
+        duration_scale.config(command=lambda v: self.duration_label.config(text=f"{float(v):.1f}秒"))
+
+        # 静音检测时长
+        ttk.Label(record_frame, text="静音检测时长(秒):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.silence_var = tk.DoubleVar(value=self.config_manager.get('silence_duration', 1.5))
+        silence_scale = ttk.Scale(
+            record_frame,
+            from_=0.5,
+            to=3.0,
+            variable=self.silence_var,
+            orient=tk.HORIZONTAL,
+            length=200
+        )
+        silence_scale.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
+        self.silence_label = ttk.Label(record_frame, text=f"{self.silence_var.get():.1f}秒")
+        self.silence_label.grid(row=1, column=2, sticky=tk.W, pady=5, padx=5)
+        silence_scale.config(command=lambda v: self.silence_label.config(text=f"{float(v):.1f}秒"))
+
+        # 最小说话时长
+        ttk.Label(record_frame, text="最小说话时长(秒):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.min_speech_var = tk.DoubleVar(value=self.config_manager.get('min_speech_duration', 0.5))
+        min_speech_scale = ttk.Scale(
+            record_frame,
+            from_=0.1,
+            to=2.0,
+            variable=self.min_speech_var,
+            orient=tk.HORIZONTAL,
+            length=200
+        )
+        min_speech_scale.grid(row=2, column=1, sticky=tk.W, pady=5, padx=5)
+        self.min_speech_label = ttk.Label(record_frame, text=f"{self.min_speech_var.get():.1f}秒")
+        self.min_speech_label.grid(row=2, column=2, sticky=tk.W, pady=5, padx=5)
+        min_speech_scale.config(command=lambda v: self.min_speech_label.config(text=f"{float(v):.1f}秒"))
+
+        # 3. TTS配置区域
+        tts_frame = ttk.LabelFrame(settings_frame, text="语音合成配置", padding="10")
+        tts_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5, padx=5)
+
+        ttk.Label(tts_frame, text="语音选择:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.tts_voice_var = tk.StringVar(value=self.config_manager.get('tts_voice', 'zh-CN-XiaoxiaoNeural'))
+        tts_voice_combo = ttk.Combobox(
+            tts_frame,
+            textvariable=self.tts_voice_var,
+            values=[
+                'zh-CN-XiaoxiaoNeural',  # 晓晓（女声，普通话）
+                'zh-CN-YunxiNeural',     # 云希（男声，普通话）
+                'zh-CN-YunyangNeural',   # 云扬（男声，普通话）
+                'zh-CN-XiaoyiNeural',    # 晓伊（女声，普通话）
+                'zh-CN-YunjianNeural',   # 云健（男声，普通话）
+            ],
+            state='readonly',
+            width=25
+        )
+        tts_voice_combo.grid(row=0, column=1, sticky=tk.W, pady=5, padx=5)
+
+        ttk.Label(tts_frame, text="语速调整:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.tts_rate_var = tk.IntVar(value=self.config_manager.get('tts_rate', 0))
+        tts_rate_scale = ttk.Scale(
+            tts_frame,
+            from_=-50,
+            to=50,
+            variable=self.tts_rate_var,
+            orient=tk.HORIZONTAL,
+            length=200
+        )
+        tts_rate_scale.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
+        self.tts_rate_label = ttk.Label(tts_frame, text=f"{self.tts_rate_var.get():+d}%")
+        self.tts_rate_label.grid(row=1, column=2, sticky=tk.W, pady=5, padx=5)
+        tts_rate_scale.config(command=lambda v: self.tts_rate_label.config(text=f"{int(float(v)):+d}%"))
+
+        # 4. 按钮区域
+        button_frame = ttk.Frame(settings_frame)
+        button_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=20, padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="保存配置",
+            command=self._save_settings
+        ).grid(row=0, column=0, padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="重置为默认",
+            command=self._reset_settings
+        ).grid(row=0, column=1, padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="应用并重新加载模型",
+            command=self._apply_and_reload_model
+        ).grid(row=0, column=2, padx=5)
+
+        # 5. 说明区域
+        info_frame = ttk.LabelFrame(settings_frame, text="说明", padding="10")
+        info_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=5)
+        settings_frame.rowconfigure(4, weight=1)
+
+        info_text = scrolledtext.ScrolledText(info_frame, height=8, wrap=tk.WORD)
+        info_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        info_frame.columnconfigure(0, weight=1)
+        info_frame.rowconfigure(0, weight=1)
+
+        info_content = """配置说明：
+
+1. 模型版本：
+   - tiny: 最快，约39MB，适合配置较低的电脑
+   - small: 较快，约244MB，准确度一般
+   - base: 平衡，约147MB，速度和准确度平衡
+   - medium: 推荐，约1.5GB，准确度高（默认）
+   - large: 最准确，约3GB，速度较慢
+
+2. 计算设备：
+   - cpu: 使用CPU计算，兼容性好（推荐）
+   - cuda: 使用NVIDIA显卡加速，需要安装CUDA
+
+3. 录音配置：
+   - 最大录音时长: 单次录音的最长时间
+   - 静音检测时长: 静音多久后认为说话结束
+   - 最小说话时长: 低于此时长的录音将被忽略
+
+4. 注意：更改模型配置后，需要点击"应用并重新加载模型"才能生效。
+"""
+        info_text.insert(tk.END, info_content)
+        info_text.config(state=tk.DISABLED)
+
+    def _save_settings(self):
+        """保存设置"""
+        try:
+            # 更新配置
+            self.config_manager.set('whisper_model', self.model_var.get())
+            self.config_manager.set('whisper_device', self.device_var.get())
+            self.config_manager.set('whisper_compute_type', self.compute_type_var.get())
+            self.config_manager.set('record_duration', self.duration_var.get())
+            self.config_manager.set('silence_duration', self.silence_var.get())
+            self.config_manager.set('min_speech_duration', self.min_speech_var.get())
+            self.config_manager.set('tts_voice', self.tts_voice_var.get())
+            self.config_manager.set('tts_rate', self.tts_rate_var.get())
+            self.config_manager.set('current_column', self.current_column)
+
+            # 保存到文件
+            if self.config_manager.save_config():
+                messagebox.showinfo("成功", "配置已保存！\n\n注意：模型配置需要重新加载模型才能生效。")
+                self.log("配置已保存")
+            else:
+                messagebox.showerror("错误", "保存配置失败")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存配置失败: {e}")
+            self.log(f"保存配置失败: {e}")
+
+    def _reset_settings(self):
+        """重置为默认设置"""
+        if messagebox.askyesno("确认", "确定要重置为默认设置吗？"):
+            self.config_manager.reset_to_default()
+            # 更新界面显示
+            self.model_var.set(self.config_manager.get('whisper_model'))
+            self.device_var.set(self.config_manager.get('whisper_device'))
+            self.compute_type_var.set(self.config_manager.get('whisper_compute_type'))
+            self.duration_var.set(self.config_manager.get('record_duration'))
+            self.silence_var.set(self.config_manager.get('silence_duration'))
+            self.min_speech_var.set(self.config_manager.get('min_speech_duration'))
+            self.tts_voice_var.set(self.config_manager.get('tts_voice'))
+            self.tts_rate_var.set(self.config_manager.get('tts_rate'))
+            messagebox.showinfo("成功", "已重置为默认设置")
+            self.log("配置已重置为默认")
+
+    def _apply_and_reload_model(self):
+        """应用设置并重新加载模型"""
+        if messagebox.askyesno(
+            "确认",
+            "重新加载模型可能需要几分钟时间。\n确定要继续吗？"
+        ):
+            # 先保存配置
+            self._save_settings()
+
+            # 禁用录音按钮
+            self.record_button.config(state="disabled")
+            self.status_label.config(text="正在重新加载模型，请稍候...", foreground="blue")
+            self.log("开始重新加载模型...")
+
+            # 在后台线程中重新加载
+            reload_thread = threading.Thread(target=self._reload_model, daemon=True)
+            reload_thread.start()
+
+    def _reload_model(self):
+        """重新加载语音识别模型"""
+        try:
+            # 重新初始化SpeechRecognition
+            self.root.after(0, lambda: self.log("正在加载新的语音识别模型..."))
+            self.speech_recognition = SpeechRecognition(
+                model=self.config_manager.get('whisper_model'),
+                device=self.config_manager.get('whisper_device'),
+                compute_type=self.config_manager.get('whisper_compute_type')
+            )
+
+            # 重新初始化SpeechSynthesis（应用新的语音设置）
+            self.root.after(0, lambda: self.log("正在更新语音合成设置..."))
+            self.speech_synthesis = SpeechSynthesis(
+                voice=self.config_manager.get('tts_voice'),
+                rate=self.config_manager.get('tts_rate')
+            )
+
+            # 完成
+            self.root.after(0, lambda: self.status_label.config(
+                text="[就绪] 模型已重新加载", foreground="green"
+            ))
+            self.root.after(0, lambda: self.record_button.config(state="normal"))
+            self.root.after(0, lambda: self.log("模型重新加载完成！"))
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            self.root.after(0, lambda: self.status_label.config(
+                text=f"加载失败: {error_msg[:50]}...", foreground="red"
+            ))
+            self.root.after(0, lambda: self.log(f"重新加载模型失败: {error_msg}"))
+            self.root.after(0, lambda: self.log(f"详细: {traceback.format_exc()}"))
+
     def _select_file(self):
         """选择Excel文件"""
         file_path = filedialog.askopenfilename(
@@ -390,11 +700,14 @@ class GradeEntryApp:
         try:
             # 循环录音，直到用户点击停止
             while self.is_recording:
-                # 启动实时录音
+                # 启动实时录音（使用配置中的参数）
+                silence_duration = self.config_manager.get('silence_duration', 1.5)
+                min_speech_duration = self.config_manager.get('min_speech_duration', 0.5)
+
                 success = self.speech_recognition.record_audio_realtime(
                     on_speech_end=on_speech_end,
-                    silence_duration=1.5,  # 静音1.5秒后认为说话结束
-                    min_speech_duration=0.5  # 最少0.5秒才识别
+                    silence_duration=silence_duration,
+                    min_speech_duration=min_speech_duration
                 )
 
                 if not success and self.is_recording:

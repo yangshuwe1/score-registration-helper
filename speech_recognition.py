@@ -32,13 +32,25 @@ except ImportError:
 
 
 class SpeechRecognition:
-    def __init__(self):
+    def __init__(self, model: str = None, device: str = None, compute_type: str = None):
+        """
+        初始化语音识别模块
+        model: 模型版本（tiny, small, base, medium, large），None则使用配置文件
+        device: 计算设备（cpu, cuda），None则使用配置文件
+        compute_type: 计算类型（int8, float16, float32），None则使用配置文件
+        """
         self.model: Optional[WhisperModel] = None
         self.is_recording = False
         self.audio_frames = []
         self.audio_data = []  # 用于sounddevice
         self.callback = None  # 实时识别回调函数
         self._vad_warning_shown = False  # 标记VAD警告是否已显示
+
+        # 使用传入的参数或配置文件的值
+        self.model_name = model if model is not None else WHISPER_MODEL
+        self.device_name = device if device is not None else WHISPER_DEVICE
+        self.compute_type_name = compute_type if compute_type is not None else WHISPER_COMPUTE_TYPE
+
         self._load_model()
     
     def _load_model(self):
@@ -47,51 +59,41 @@ class SpeechRecognition:
             import os
             import time
             from pathlib import Path
-            
+
             print("=" * 60)
             print("正在加载语音识别模型...")
-            print(f"模型: {WHISPER_MODEL}, 设备: {WHISPER_DEVICE}, 计算类型: {WHISPER_COMPUTE_TYPE}")
+            print(f"模型: {self.model_name}, 设备: {self.device_name}, 计算类型: {self.compute_type_name}")
             print("=" * 60)
-            
+
             # 检查模型是否已下载
             cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
-            model_path = cache_dir / f"models--guillaumekln--faster-whisper-{WHISPER_MODEL}"
-            
+            model_path = cache_dir / f"models--guillaumekln--faster-whisper-{self.model_name}"
+
             if model_path.exists():
                 print("✓ 检测到已下载的模型")
                 print("  正在加载到内存（可能需要10-30秒）...")
             else:
                 print("⚠ 首次运行，需要下载模型")
-                print("  模型大小: 约150MB")
+                print(f"  模型: {self.model_name}")
                 print("  下载时间: 取决于网络速度（通常1-5分钟）")
                 print("  请保持网络连接，不要关闭程序...")
                 print("  正在下载中...")
-            
+
             # 记录开始时间
             start_time = time.time()
-            
+
             # 加载模型（这里可能会卡住，但会在后台线程中执行）
             print("  正在初始化模型（请稍候）...")
             self.model = WhisperModel(
-                WHISPER_MODEL,
-                device=WHISPER_DEVICE,
-                compute_type=WHISPER_COMPUTE_TYPE,
+                self.model_name,
+                device=self.device_name,
+                compute_type=self.compute_type_name,
                 download_root=None  # 使用默认缓存目录
             )
-            
+
             elapsed_time = time.time() - start_time
             print(f"✓ 模型加载完成！耗时: {elapsed_time:.1f}秒")
             print("=" * 60)
-            
-            self.model = WhisperModel(
-                WHISPER_MODEL,
-                device=WHISPER_DEVICE,
-                compute_type=WHISPER_COMPUTE_TYPE,
-                download_root=None  # 使用默认缓存目录
-            )
-            print("=" * 50)
-            print("✓ 模型加载完成！")
-            print("=" * 50)
         except Exception as e:
             print("=" * 50)
             print(f"✗ 加载模型失败: {e}")
