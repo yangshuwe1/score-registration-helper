@@ -18,8 +18,14 @@ except ImportError:
 
 
 class SpeechSynthesis:
-    def __init__(self):
-        self.voice = TTS_VOICE
+    def __init__(self, voice: str = None, rate: int = 0):
+        """
+        初始化语音合成模块
+        voice: 语音选择（如'zh-CN-XiaoxiaoNeural'），None则使用配置文件
+        rate: 语速调整（-100到100），0为正常速度
+        """
+        self.voice = voice if voice is not None else TTS_VOICE
+        self.rate = rate  # 语速调整百分比
         self._loop = None
         self.temp_audio_file = "temp_audio.mp3"
         if PYGAME_AVAILABLE:
@@ -42,7 +48,9 @@ class SpeechSynthesis:
     async def _generate_audio(self, text: str) -> str:
         """生成音频文件"""
         try:
-            communicate = edge_tts.Communicate(text, self.voice)
+            # 构建语速参数（如果有设置）
+            rate_str = f"{self.rate:+d}%" if self.rate != 0 else "+0%"
+            communicate = edge_tts.Communicate(text, self.voice, rate=rate_str)
             await communicate.save(self.temp_audio_file)
             return self.temp_audio_file
         except Exception as e:
