@@ -347,19 +347,20 @@ class SpeechRecognition:
             # 这个 prompt 会告诉 whisper 我们期望的输入格式，提高识别准确率
             # 注意：不要在 prompt 中包含具体例子，否则 whisper 会学习这些内容
             initial_prompt = (
-                "这是一个成绩登记系统。"
-                "用户只会输入数字序号和数字分数，或者中文学生姓名和数字分数。"
-                "不会说其他无关内容。"
+                "李华九十八分"
+                "王洪七十二分"
+                "一号一百分"
+                "二十号九十分"
+                "号 分 撤回 撤销 一二三四五六七八九十"
             )
 
             # 尝试使用VAD过滤器（需要onnxruntime）
             try:
                 segments, info = self.model.transcribe(
                     audio_file,
-                    hotwords=["一","二","三","四","五","六","七","八","九","十","号","分"],
                     beam_size=5,
                     language="zh",
-                    vad_filter=True,  # 启用VAD过滤，提高准确率
+                    vad_filter=False,  # 启用VAD过滤，提高准确率
                     vad_parameters=dict(min_silence_duration_ms=500),
                     initial_prompt=initial_prompt  # 添加引导性 prompt
                 )
