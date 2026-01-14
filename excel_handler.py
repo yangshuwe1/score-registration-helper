@@ -559,3 +559,50 @@ class ExcelHandler:
         except Exception as e:
             print(f"获取学生总数失败: {e}")
             return 0
+
+    def get_column_names(self, row_num: int = None) -> List[str]:
+        """
+        获取指定行的列名列表
+        row_num: 列名所在行号（1-based），默认为最后一行表头（header_rows）
+        返回: 列名列表，索引对应列号（0-based）
+        """
+        try:
+            if row_num is None:
+                row_num = self.header_rows
+
+            if self.is_xls:
+                if self.xls_sheet is None:
+                    return []
+                if row_num < 1 or row_num > self.xls_sheet.nrows:
+                    return []
+
+                # xlrd使用0-based索引
+                row_idx = row_num - 1
+                column_names = []
+                for col_idx in range(self.xls_sheet.ncols):
+                    cell_value = str(self.xls_sheet.cell_value(row_idx, col_idx)).strip()
+                    column_names.append(cell_value if cell_value else f"列{col_idx + 1}")
+                return column_names
+            else:
+                if self.xlsx_ws is None:
+                    return []
+                if row_num < 1 or row_num > self.xlsx_ws.max_row:
+                    return []
+
+                column_names = []
+                for col_idx in range(1, self.xlsx_ws.max_column + 1):
+                    cell_value = str(self.xlsx_ws.cell(row=row_num, column=col_idx).value or '').strip()
+                    column_names.append(cell_value if cell_value else f"列{col_idx}")
+                return column_names
+
+        except Exception as e:
+            print(f"获取列名失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def update_header_rows(self, header_rows: int):
+        """
+        更新表头行数配置
+        """
+        self.header_rows = header_rows
