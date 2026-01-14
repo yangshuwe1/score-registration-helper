@@ -6,30 +6,27 @@ GUI界面模块
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import threading
-from typing import Optional, Dict, List
+from typing import Optional
 from excel_handler import ExcelHandler
 from speech_recognition import SpeechRecognition
 from speech_synthesis import SpeechSynthesis
 from student_parser import StudentParser
-from config_manager import ConfigManager
+from config import RECORD_DURATION
 
 
 class GradeEntryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("登分助手 - 智能配置版")
-        self.root.geometry("900x700")
+        self.root.title("登分助手")
+        self.root.geometry("800x600")
         self.root.resizable(True, True)
-
-        # 初始化配置管理器
-        self.config_manager = ConfigManager()
-
+        
         # 创建界面（先创建，再加载模型）
         self._create_widgets()
-
+        
         # 显示加载提示
         self.status_label.config(
-            text="正在初始化...（首次运行需要下载模型，请耐心等待）",
+            text="正在初始化...（首次运行需要下载模型，请耐心等待）", 
             foreground="blue"
         )
         self.log("=" * 50)
@@ -38,18 +35,15 @@ class GradeEntryApp:
         self.log("     如果网络较慢，可能需要几分钟时间")
         self.log("     程序正在后台加载，请勿关闭窗口")
         self.log("=" * 50)
-
+        
         # 在后台线程中初始化模块（避免阻塞界面）
         init_thread = threading.Thread(target=self._initialize_modules, daemon=True)
         init_thread.start()
-
+        
         # 状态变量
         self.current_column = 'final_score'  # 默认期末成绩
         self.is_recording = False
         self.last_operation = None  # 上一步操作缓存：{'row': int, 'column': str, 'old_score': float, 'new_score': float, 'name': str}
-
-        # 列名缓存（用于配置界面）
-        self.cached_column_names: List[str] = []
     
     def _initialize_modules(self):
         """在后台线程中初始化模块（带详细进度提示）"""
@@ -134,46 +128,27 @@ class GradeEntryApp:
                 self.root.after(0, lambda: self.log(f"详细: {traceback.format_exc()}"))
     
     def _create_widgets(self):
-        """创建界面组件（使用标签页）"""
-        # 创建Notebook（标签页容器）
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # 创建主界面标签页
-        self.main_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.main_tab, text="  主界面  ")
-
-        # 创建配置标签页
-        self.config_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.config_tab, text="  配置  ")
-
-        # 构建主界面
-        self._create_main_tab()
-
-        # 构建配置界面
-        self._create_config_tab()
-
-    def _create_main_tab(self):
-        """创建主界面标签页"""
+        """创建界面组件"""
         # 主框架
-        main_frame = ttk.Frame(self.main_tab, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(4, weight=1)
-
+        
         # 1. 文件选择区域
         file_frame = ttk.LabelFrame(main_frame, text="Excel文件", padding="10")
         file_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         file_frame.columnconfigure(1, weight=1)
-
+        
         ttk.Button(file_frame, text="选择Excel文件", command=self._select_file).grid(row=0, column=0, padx=5)
         self.file_label = ttk.Label(file_frame, text="未选择文件", foreground="gray")
         self.file_label.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
-
+        
         # 2. 列选择区域
         column_frame = ttk.LabelFrame(main_frame, text="选择输入列", padding="10")
         column_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
-
+        
         self.column_var = tk.StringVar(value="final_score")
         ttk.Radiobutton(
             column_frame, text="期末成绩", variable=self.column_var,
@@ -183,363 +158,42 @@ class GradeEntryApp:
             column_frame, text="平时成绩", variable=self.column_var,
             value="regular_score", command=self._on_column_change
         ).grid(row=0, column=1, padx=10)
-
+        
         # 3. 语音输入区域
         speech_frame = ttk.LabelFrame(main_frame, text="语音输入", padding="10")
         speech_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
-
+        
         self.record_button = ttk.Button(
             speech_frame, text="开始录音", command=self._toggle_recording,
             state="disabled"
         )
         self.record_button.grid(row=0, column=0, padx=5)
-
+        
         self.status_label = ttk.Label(speech_frame, text="请先选择Excel文件", foreground="gray")
         self.status_label.grid(row=0, column=1, padx=10)
-
+        
         # 4. 识别结果显示
         result_frame = ttk.LabelFrame(main_frame, text="识别结果", padding="10")
         result_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         result_frame.columnconfigure(0, weight=1)
-
+        
         self.result_text = tk.Text(result_frame, height=3, wrap=tk.WORD)
         self.result_text.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5)
         result_scrollbar = ttk.Scrollbar(result_frame, orient="vertical", command=self.result_text.yview)
         result_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.result_text.configure(yscrollcommand=result_scrollbar.set)
-
+        
         # 5. 日志区域
         log_frame = ttk.LabelFrame(main_frame, text="操作日志", padding="10")
         log_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
-
+        main_frame.rowconfigure(4, weight=1)
+        
         self.log_text = scrolledtext.ScrolledText(log_frame, height=10, wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.log_text.config(state=tk.DISABLED)
-
-    def _create_config_tab(self):
-        """创建配置标签页"""
-        # 主框架（带滚动条）
-        canvas = tk.Canvas(self.config_tab)
-        scrollbar = ttk.Scrollbar(self.config_tab, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # 主配置区域
-        config_frame = ttk.Frame(scrollable_frame, padding="10")
-        config_frame.pack(fill=tk.BOTH, expand=True)
-
-        # ===== 1. Excel配置区域 =====
-        excel_frame = ttk.LabelFrame(config_frame, text="Excel配置", padding="10")
-        excel_frame.pack(fill=tk.X, pady=5)
-
-        # 表头行数
-        row_num = 0
-        ttk.Label(excel_frame, text="表头行数:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=5)
-        self.header_rows_var = tk.IntVar(value=self.config_manager.get_header_rows())
-        header_rows_spinbox = ttk.Spinbox(excel_frame, from_=0, to=10, textvariable=self.header_rows_var, width=10)
-        header_rows_spinbox.grid(row=row_num, column=1, sticky=tk.W, padx=5, pady=5)
-        ttk.Label(excel_frame, text="（数据从第几行开始的前一行，通常为1-3）", foreground="gray").grid(
-            row=row_num, column=2, sticky=tk.W, padx=5, pady=5
-        )
-
-        # 列名行号
-        row_num += 1
-        ttk.Label(excel_frame, text="列名所在行:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=5)
-        self.column_name_row_var = tk.IntVar(value=self.config_manager.get_header_rows())
-        column_name_row_spinbox = ttk.Spinbox(excel_frame, from_=1, to=10, textvariable=self.column_name_row_var, width=10)
-        column_name_row_spinbox.grid(row=row_num, column=1, sticky=tk.W, padx=5, pady=5)
-        ttk.Button(excel_frame, text="读取列名", command=self._read_column_names).grid(
-            row=row_num, column=2, sticky=tk.W, padx=5, pady=5
-        )
-
-        # 分隔线
-        row_num += 1
-        ttk.Separator(excel_frame, orient='horizontal').grid(
-            row=row_num, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10
-        )
-
-        # 列映射配置
-        row_num += 1
-        ttk.Label(excel_frame, text="列映射配置", font=('TkDefaultFont', 10, 'bold')).grid(
-            row=row_num, column=0, columnspan=3, sticky=tk.W, padx=5, pady=5
-        )
-
-        # 学号列
-        row_num += 1
-        ttk.Label(excel_frame, text="学号列:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=5)
-        self.student_id_col_var = tk.StringVar()
-        self.student_id_col_combo = ttk.Combobox(
-            excel_frame, textvariable=self.student_id_col_var, width=30, state="readonly"
-        )
-        self.student_id_col_combo.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
-
-        # 姓名列
-        row_num += 1
-        ttk.Label(excel_frame, text="姓名列:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=5)
-        self.name_col_var = tk.StringVar()
-        self.name_col_combo = ttk.Combobox(
-            excel_frame, textvariable=self.name_col_var, width=30, state="readonly"
-        )
-        self.name_col_combo.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
-
-        # 平时成绩列
-        row_num += 1
-        ttk.Label(excel_frame, text="平时成绩列:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=5)
-        self.regular_score_col_var = tk.StringVar()
-        self.regular_score_col_combo = ttk.Combobox(
-            excel_frame, textvariable=self.regular_score_col_var, width=30, state="readonly"
-        )
-        self.regular_score_col_combo.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
-
-        # 期末成绩列
-        row_num += 1
-        ttk.Label(excel_frame, text="期末成绩列:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=5)
-        self.final_score_col_var = tk.StringVar()
-        self.final_score_col_combo = ttk.Combobox(
-            excel_frame, textvariable=self.final_score_col_var, width=30, state="readonly"
-        )
-        self.final_score_col_combo.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
-
-        excel_frame.columnconfigure(2, weight=1)
-
-        # ===== 2. 语音识别配置区域 =====
-        speech_config_frame = ttk.LabelFrame(config_frame, text="语音识别配置", padding="10")
-        speech_config_frame.pack(fill=tk.X, pady=5)
-
-        # 模型选择
-        ttk.Label(speech_config_frame, text="识别模型:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        self.model_var = tk.StringVar(value=self.config_manager.get_whisper_model())
-        self.model_combo = ttk.Combobox(
-            speech_config_frame, textvariable=self.model_var,
-            values=ConfigManager.AVAILABLE_MODELS, width=15, state="readonly"
-        )
-        self.model_combo.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
-        self.model_combo.bind("<<ComboboxSelected>>", self._on_model_change)
-
-        # 模型说明
-        self.model_desc_label = ttk.Label(
-            speech_config_frame,
-            text=ConfigManager.MODEL_DESCRIPTIONS.get(self.model_var.get(), ""),
-            foreground="gray"
-        )
-        self.model_desc_label.grid(row=0, column=2, sticky=tk.W, padx=5, pady=5)
-
-        speech_config_frame.columnconfigure(2, weight=1)
-
-        # ===== 3. 按钮区域 =====
-        button_frame = ttk.Frame(config_frame)
-        button_frame.pack(fill=tk.X, pady=10)
-
-        ttk.Button(button_frame, text="保存配置", command=self._save_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="重置为默认", command=self._reset_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="应用配置", command=self._apply_config).pack(side=tk.LEFT, padx=5)
-
-        # 加载当前配置
-        self._load_current_config()
-
-    # ===== 配置相关方法 =====
-
-    def _load_current_config(self):
-        """加载当前配置到界面"""
-        # 加载Excel列配置
-        columns = self.config_manager.get_excel_columns()
-
-        # 如果还没有列名，先加载默认值
-        if not self.cached_column_names:
-            self.cached_column_names = [
-                f"列{i}  (索引{i})" for i in range(26)
-            ]
-
-        # 更新下拉框选项
-        self._update_column_combos()
-
-        # 设置当前选中的列
-        if 'student_id' in columns:
-            idx = columns['student_id']
-            if idx < len(self.cached_column_names):
-                self.student_id_col_var.set(self.cached_column_names[idx])
-
-        if 'name' in columns:
-            idx = columns['name']
-            if idx < len(self.cached_column_names):
-                self.name_col_var.set(self.cached_column_names[idx])
-
-        if 'regular_score' in columns:
-            idx = columns['regular_score']
-            if idx < len(self.cached_column_names):
-                self.regular_score_col_var.set(self.cached_column_names[idx])
-
-        if 'final_score' in columns:
-            idx = columns['final_score']
-            if idx < len(self.cached_column_names):
-                self.final_score_col_var.set(self.cached_column_names[idx])
-
-    def _update_column_combos(self):
-        """更新列下拉框的选项"""
-        self.student_id_col_combo['values'] = self.cached_column_names
-        self.name_col_combo['values'] = self.cached_column_names
-        self.regular_score_col_combo['values'] = self.cached_column_names
-        self.final_score_col_combo['values'] = self.cached_column_names
-
-    def _read_column_names(self):
-        """从Excel文件读取列名"""
-        if self.excel_handler.file_path is None:
-            messagebox.showwarning("提示", "请先在主界面选择Excel文件")
-            return
-
-        # 获取列名所在行号
-        row_num = self.column_name_row_var.get()
-
-        # 读取列名
-        column_names = self.excel_handler.get_column_names(row_num)
-
-        if not column_names:
-            messagebox.showerror("错误", "读取列名失败，请检查行号设置")
-            return
-
-        # 更新缓存
-        self.cached_column_names = [
-            f"{name}  (索引{i})" for i, name in enumerate(column_names)
-        ]
-
-        # 更新下拉框
-        self._update_column_combos()
-
-        # 智能匹配列名
-        self._auto_match_columns(column_names)
-
-        messagebox.showinfo("成功", f"已读取 {len(column_names)} 个列名")
-
-    def _auto_match_columns(self, column_names: List[str]):
-        """智能匹配列名到字段"""
-        # 匹配规则
-        rules = {
-            'student_id': ['学号', '学生学号', 'ID', 'id', '编号'],
-            'name': ['姓名', '学生姓名', '名字', 'name', 'Name'],
-            'regular_score': ['平时', '平时成绩', '平时分', '日常', '日常成绩'],
-            'final_score': ['期末', '期末成绩', '期末分', '考试', '考试成绩']
-        }
-
-        for field, keywords in rules.items():
-            for i, col_name in enumerate(column_names):
-                if any(keyword in col_name for keyword in keywords):
-                    # 找到匹配，设置对应的下拉框
-                    display_value = f"{col_name}  (索引{i})"
-                    if field == 'student_id':
-                        self.student_id_col_var.set(display_value)
-                    elif field == 'name':
-                        self.name_col_var.set(display_value)
-                    elif field == 'regular_score':
-                        self.regular_score_col_var.set(display_value)
-                    elif field == 'final_score':
-                        self.final_score_col_var.set(display_value)
-                    break
-
-    def _on_model_change(self, event=None):
-        """模型选择改变时更新说明"""
-        model = self.model_var.get()
-        desc = ConfigManager.MODEL_DESCRIPTIONS.get(model, "")
-        self.model_desc_label.config(text=desc)
-
-    def _save_config(self):
-        """保存配置到文件"""
-        try:
-            # 保存表头行数
-            self.config_manager.set_header_rows(self.header_rows_var.get())
-
-            # 保存列映射
-            def get_column_index(var_value: str) -> int:
-                """从显示值中提取列索引"""
-                try:
-                    # 格式: "列名  (索引X)"
-                    if "(索引" in var_value:
-                        idx_str = var_value.split("(索引")[1].rstrip(")")
-                        return int(idx_str)
-                    return 0
-                except:
-                    return 0
-
-            columns = {
-                'student_id': get_column_index(self.student_id_col_var.get()),
-                'name': get_column_index(self.name_col_var.get()),
-                'regular_score': get_column_index(self.regular_score_col_var.get()),
-                'final_score': get_column_index(self.final_score_col_var.get())
-            }
-            self.config_manager.set_excel_columns(columns)
-
-            # 保存语音识别配置
-            self.config_manager.set_whisper_model(self.model_var.get())
-
-            # 保存到文件
-            if self.config_manager.save_config():
-                messagebox.showinfo("成功", "配置已保存！\n注意：部分配置（如模型）需要重启程序才能生效。")
-                self.log("配置已保存")
-            else:
-                messagebox.showerror("错误", "保存配置失败")
-
-        except Exception as e:
-            messagebox.showerror("错误", f"保存配置时出错: {str(e)}")
-
-    def _reset_config(self):
-        """重置为默认配置"""
-        if messagebox.askyesno("确认", "确定要重置为默认配置吗？"):
-            self.config_manager.reset_to_default()
-            self.header_rows_var.set(self.config_manager.get_header_rows())
-            self.column_name_row_var.set(self.config_manager.get_header_rows())
-            self.model_var.set(self.config_manager.get_whisper_model())
-            self._on_model_change()
-            self._load_current_config()
-            messagebox.showinfo("成功", "已重置为默认配置")
-            self.log("配置已重置为默认")
-
-    def _apply_config(self):
-        """应用配置（不保存到文件）"""
-        try:
-            # 应用表头行数
-            header_rows = self.header_rows_var.get()
-            if self.excel_handler:
-                self.excel_handler.update_header_rows(header_rows)
-
-            # 应用列映射（更新config模块的全局变量）
-            import config
-
-            def get_column_index(var_value: str) -> int:
-                try:
-                    if "(索引" in var_value:
-                        idx_str = var_value.split("(索引")[1].rstrip(")")
-                        return int(idx_str)
-                    return 0
-                except:
-                    return 0
-
-            config.EXCEL_COLUMNS = {
-                'student_id': get_column_index(self.student_id_col_var.get()),
-                'name': get_column_index(self.name_col_var.get()),
-                'regular_score': get_column_index(self.regular_score_col_var.get()),
-                'final_score': get_column_index(self.final_score_col_var.get())
-            }
-            config.HEADER_ROWS = header_rows
-
-            messagebox.showinfo("成功", "配置已应用！\n注意：语音识别模型需要重启程序才能更改。")
-            self.log("配置已应用到当前会话")
-
-        except Exception as e:
-            messagebox.showerror("错误", f"应用配置时出错: {str(e)}")
-
-    # ===== 主界面方法 =====
-
+    
     def _select_file(self):
         """选择Excel文件"""
         file_path = filedialog.askopenfilename(
