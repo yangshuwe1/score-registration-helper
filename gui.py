@@ -24,12 +24,6 @@ class GradeEntryApp:
         # 初始化配置管理器
         self.config_manager = ConfigManager()
 
-        # 状态变量（必须在创建界面之前初始化）
-        self.current_column = 'final_score'  # 默认期末成绩
-        self.is_recording = False
-        self.last_operation = None  # 上一步操作缓存：{'row': int, 'column': str, 'old_score': float, 'new_score': float, 'name': str}
-        self.cached_column_names: List[str] = []  # 列名缓存（用于配置界面）
-
         # 创建界面（先创建，再加载模型）
         self._create_widgets()
 
@@ -48,6 +42,14 @@ class GradeEntryApp:
         # 在后台线程中初始化模块（避免阻塞界面）
         init_thread = threading.Thread(target=self._initialize_modules, daemon=True)
         init_thread.start()
+
+        # 状态变量
+        self.current_column = 'final_score'  # 默认期末成绩
+        self.is_recording = False
+        self.last_operation = None  # 上一步操作缓存：{'row': int, 'column': str, 'old_score': float, 'new_score': float, 'name': str}
+
+        # 列名缓存（用于配置界面）
+        self.cached_column_names: List[str] = []
     
     def _initialize_modules(self):
         """在后台线程中初始化模块（带详细进度提示）"""
